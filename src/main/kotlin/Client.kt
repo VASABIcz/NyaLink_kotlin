@@ -4,59 +4,55 @@ import kotlinx.serialization.*
 import kotlinx.serialization.json.*
 
 
-
 @OptIn(DelicateCoroutinesApi::class)
 class Client(var id: Int, var ws: DefaultWebSocketSession) {
     var nodes = HashMap<String, Node>()
-    var closed = false
-    var listenner: Job? = null
-    private var done = Job()
+    var pars = Json { ignoreUnknownKeys=true }
 
-    private var counter = 0
+    val available_nodes: MutableCollection<Node>
+        get() = nodes.values.filter { it.available }.toMutableList()
 
-    init {
-        GlobalScope.launch { create_listener() }
-    }
+    val best_node_players: Node?
+        get() = available_nodes.minByOrNull { node -> node.players.size }
+
+    //todo
+    val best_node_fetch: Node?
+        get() = available_nodes.minByOrNull { node -> node.players.size }
+
+    val connected: Boolean
+        get() = ws.isActive
 
     suspend fun handle(frame: Frame.Text) {
         val data = frame.readText().trim().also { println(it) }
-        Json { ignoreUnknownKeys=true }
-        val d =Json.decodeFromString<Command>(data)
-        when (d.op) {
-            // debug
-            "SUS" -> send(counter).also { counter += 1 }
+        println("parsing $data")
+        val d = parse<Command>(data)
+        // TODO: 16/01/2022
+        println("recived op: ${d?.op}")
+        when (d?.op) {
             // nodes
-            "add_node" -> parse<AddNode>(data)?.also { add_node(it) }
-            "remove_node" -> parse<AddNode>(data)?.also {} // TODO: 16/01/2022
+            "add_node" -> parse<AddNode>(data)?.also { GlobalScope.launch { add_node(it) } }
+            "remove_node" -> parse<RemoveNode>(data)?.also { GlobalScope.launch { remove_node(it) }}
             // player
-            "destroy" -> parse<DestroyPlayer>(data)?.also {} // TODO: 16/01/2022
-            "clear" -> parse<Clear>(data)?.also {} // TODO: 16/01/2022
-            "skip" -> parse<Skip>(data)?.also {} // TODO: 16/01/2022
-            "shuffle" -> parse<Shuffle>(data)?.also {} // TODO: 16/01/2022
-            "revind" -> parse<Revind>(data)?.also {} // TODO: 16/01/2022
-            "play" -> parse<Play>(data)?.also {} // TODO: 16/01/2022
-            "pause" -> parse<Pause>(data)?.also {} // TODO: 16/01/2022
-            "remove" -> parse<Remove>(data)?.also {} // TODO: 16/01/2022
-            "seek" -> parse<Seek>(data)?.also {} // TODO: 16/01/2022
-            "loop" -> parse<Loop>(data)?.also {} // TODO: 16/01/2022
-            "skip_to" -> parse<SkiTo>(data)?.also {} // TODO: 16/01/2022
+            "destroy" -> parse<DestroyPlayer>(data)?.also {}
+            "clear" -> parse<Clear>(data)?.also {}
+            "skip" -> parse<Skip>(data)?.also {}
+            "shuffle" -> parse<Shuffle>(data)?.also {}
+            "revind" -> parse<Revind>(data)?.also {}
+            "play" -> parse<Play>(data)?.also {}
+            "pause" -> parse<Pause>(data)?.also {}
+            "remove" -> parse<Remove>(data)?.also {}
+            "seek" -> parse<Seek>(data)?.also {}
+            "loop" -> parse<Loop>(data)?.also {}
+            "skip_to" -> parse<SkiTo>(data)?.also {}
         }
-        println(d)
+        println("after parse")
     }
 
-    suspend fun loop() {
+    suspend fun listen() {
         for (x in ws.incoming) {
+            println("recived from client $id")
             when (x) {
-                is Frame.Text -> coroutineScope { launch { handle(x) } }
-                is Frame.Close -> done.complete()
-            }
-        }
-    }
-
-    suspend fun create_listener() {
-        coroutineScope {
-            listenner = launch {
-                loop()
+                is Frame.Text -> GlobalScope.launch { handle(x) }
             }
         }
     }
@@ -67,18 +63,13 @@ class Client(var id: Int, var ws: DefaultWebSocketSession) {
     }
     
     suspend fun resume(ws: DefaultWebSocketSession) {
-        done = Job()
         this.ws = ws
-        create_listener()
+        listen()
     }
 
-    suspend fun join() {
-        done.join()
-    }
-
-    inline fun <reified T> parse(data: String): T?{
+    inline fun <reified T> parse(data: String): T? {
         return try {
-            Json.decodeFromString<T>(data)
+            pars.decodeFromString<T>(data)
         } catch (t: Throwable) {
             println("failed to parse $data")
             null
@@ -87,8 +78,17 @@ class Client(var id: Int, var ws: DefaultWebSocketSession) {
 
     suspend fun add_node(data: AddNode) {
         val node = Node(data, this)
-        nodes.put(data.password, node)
-        node.connect()
+        val x = nodes.putIfAbsent(data.identifier, node)
+        if (x == null) {
+            node.connect()
+        }
     }
 
+    suspend fun remove_node(data: RemoveNode) {
+        println("removing node ${data.identifier}")
+
+        val node = nodes[data.identifier]
+        nodes.remove(data.identifier)
+        node?.teardown()
+    }
 }

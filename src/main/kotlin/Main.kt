@@ -1,14 +1,8 @@
-import kotlinx.coroutines.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.routing.*
-import io.ktor.features.*
-import io.ktor.response.*
 import io.ktor.application.*
-import io.ktor.content.*
-import io.ktor.http.cio.websocket.*
 import io.ktor.websocket.*
-
 
 
 fun main(args: Array<String>) {
@@ -18,17 +12,17 @@ fun main(args: Array<String>) {
         install(WebSockets)
         routing {
             webSocket ("/") {
-                val client = this.call.request.headers.get("client")
+                val client = this.call.request.headers["client"]
                 val id = client?.toIntOrNull()
-                println(id)
                 if (clients.containsKey(id)){
                     clients[id]?.resume(this@webSocket)
                 }
                 else if (id != null) {
                     println("succesfull")
-                    clients[id] = Client(id, this@webSocket)
+                    val clinet =  Client(id, this@webSocket)
+                    clients[id] = clinet
+                    clients[id]?.listen()
                 }
-                clients[id]?.join()
             }
         }
     }.start(wait = true)

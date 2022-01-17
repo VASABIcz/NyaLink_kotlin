@@ -34,9 +34,10 @@ dependencies  {
     implementation("io.ktor:ktor-websockets:$ktor_version")
     implementation("io.ktor:ktor-client-websockets:$ktor_version")
     implementation("io.ktor:ktor-client-cio:$ktor_version")
-    //
+    // other
     implementation("ch.qos.logback:logback-classic:1.2.10")
     implementation("org.jetbrains.kotlin:kotlin-serialization:1.6.10")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.3.2")
     implementation("com.beust:klaxon:5.5")
+    implementation("redis.clients:jedis:4.0.1")
 }

@@ -34,12 +34,11 @@ class Que<Any> {
     }
 
     private fun move_on() {
-        val x = queue_pop()
-        queue.add(x)
+        queue_pop().also { queue.add(it) }
     }
 
     private fun queue_pop(index: Int=0): Any {
-        val x = queue[index]
+        val x = queue[index].also { queue }
         queue.removeAt(index)
         return x
     }
