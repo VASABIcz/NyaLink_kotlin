@@ -49,3 +49,6 @@ data class AddNode(val identifier: String, val password: String, val secure: Boo
 
 @Serializable
 data class RemoveNode(val identifier: String, val force: Boolean=false)
+
+@Serializable
+data class VoiceState(val todo: String)

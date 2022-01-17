@@ -44,6 +44,7 @@ class Client(var id: Int, var ws: DefaultWebSocketSession) {
             "seek" -> parse<Seek>(data)?.also {}
             "loop" -> parse<Loop>(data)?.also {}
             "skip_to" -> parse<SkiTo>(data)?.also {}
+            "voice_state" -> parse<VoiceState>(data)?.also {}
         }
         println("after parse")
     }
