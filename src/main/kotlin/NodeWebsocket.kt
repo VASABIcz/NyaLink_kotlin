@@ -1,3 +1,4 @@
+import commands.Command
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.features.websocket.*
@@ -7,6 +8,8 @@ import io.ktor.http.cio.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import lavalink_commands.Stats
+
 
 class NodeWebsocket(val node: Node) {
     val connected: Boolean

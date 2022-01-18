@@ -1,3 +1,6 @@
+import commands.*
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
 import io.ktor.http.cio.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
@@ -8,6 +11,9 @@ import kotlinx.serialization.json.*
 class Client(var id: Int, var ws: DefaultWebSocketSession) {
     var nodes = HashMap<String, Node>()
     var pars = Json { ignoreUnknownKeys=true }
+    val ktor_client = HttpClient(CIO) {
+        install(io.ktor.client.features.websocket.WebSockets)
+    }
 
     val available_nodes: MutableCollection<Node>
         get() = nodes.values.filter { it.available }.toMutableList()
@@ -17,7 +23,7 @@ class Client(var id: Int, var ws: DefaultWebSocketSession) {
 
     //todo
     val best_node_fetch: Node?
-        get() = available_nodes.minByOrNull { node -> node.players.size }
+        get() = available_nodes.maxByOrNull { node -> node.semaphore.availablePermits }
 
     val connected: Boolean
         get() = ws.isActive
