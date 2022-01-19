@@ -9,5 +9,5 @@ data class Stats (
     val memory : Memory,
     val players : Int,
     val cpu : Cpu,
-    val uptime : Int
+    val uptime : Long
 )

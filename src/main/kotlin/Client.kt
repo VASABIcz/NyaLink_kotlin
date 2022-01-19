@@ -5,12 +5,12 @@ import io.ktor.http.cio.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.*
 import kotlinx.serialization.json.*
+import trackloader.Cache
 
 
 @OptIn(DelicateCoroutinesApi::class)
-class Client(var id: Int, var ws: DefaultWebSocketSession) {
+class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, val cache: Cache) {
     var nodes = HashMap<String, Node>()
-    var pars = Json { ignoreUnknownKeys=true }
     val ktor_client = HttpClient(CIO) {
         install(io.ktor.client.features.websocket.WebSockets)
     }
@@ -35,22 +35,25 @@ class Client(var id: Int, var ws: DefaultWebSocketSession) {
         // TODO: 16/01/2022
         println("recived op: ${d?.op}")
         when (d?.op) {
+            // debug
+            "debug" -> parse<Play>(data)?.also { GlobalScope.launch { play(it) } }
             // nodes
             "add_node" -> parse<AddNode>(data)?.also { GlobalScope.launch { add_node(it) } }
             "remove_node" -> parse<RemoveNode>(data)?.also { GlobalScope.launch { remove_node(it) }}
             // player
             "destroy" -> parse<DestroyPlayer>(data)?.also {}
             "clear" -> parse<Clear>(data)?.also {}
-            "skip" -> parse<Skip>(data)?.also {}
+            "skip" -> parse<Skip>(data)?.also { get_player(it.guild)?.stop() }
             "shuffle" -> parse<Shuffle>(data)?.also {}
             "revind" -> parse<Revind>(data)?.also {}
-            "play" -> parse<Play>(data)?.also {}
+            "play" -> parse<Play>(data)?.also { GlobalScope.launch { play(it) } }
             "pause" -> parse<Pause>(data)?.also {}
             "remove" -> parse<Remove>(data)?.also {}
             "seek" -> parse<Seek>(data)?.also {}
             "loop" -> parse<Loop>(data)?.also {}
             "skip_to" -> parse<SkiTo>(data)?.also {}
-            "voice_state" -> parse<VoiceState>(data)?.also {}
+            "voice_state_update" -> parse<VoiceStateUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_state(it) }
+            "voice_server_update" -> parse<VoiceServerUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_server(it) }
         }
         println("after parse")
     }
@@ -76,9 +79,9 @@ class Client(var id: Int, var ws: DefaultWebSocketSession) {
 
     inline fun <reified T> parse(data: String): T? {
         return try {
-            pars.decodeFromString<T>(data)
+            parser.decodeFromString<T>(data)
         } catch (t: Throwable) {
-            println("failed to parse $data")
+            println("failed to parse $t")
             null
         }
     }
@@ -97,5 +100,29 @@ class Client(var id: Int, var ws: DefaultWebSocketSession) {
         val node = nodes[data.identifier]
         nodes.remove(data.identifier)
         node?.teardown()
+    }
+
+    fun players(): HashMap<Long, Player> {
+        val players = HashMap<Long, Player>()
+
+        available_nodes.forEach() {
+            it.players.values.forEach() {
+                players.put(it.id, it)
+            }
+        }
+
+        return players
+    }
+
+    suspend fun create_player(id: Long): Player? {
+        return best_node_players?.create_player(id)
+    }
+
+    suspend fun get_player(id: Long): Player? {
+        return players()[id] ?: create_player(id)
+    }
+
+    suspend fun play(data: Play) {
+        get_player(data.guild)?.fetch_track(data)
     }
 }

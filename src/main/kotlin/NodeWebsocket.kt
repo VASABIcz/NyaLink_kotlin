@@ -6,9 +6,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.http.cio.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
-import lavalink_commands.Stats
+import lavalink_commands.*
 
 
 class NodeWebsocket(val node: Node) {
@@ -17,15 +15,17 @@ class NodeWebsocket(val node: Node) {
     var closed = false
 
     var ws: DefaultWebSocketSession? = null
-    var pars = Json { ignoreUnknownKeys=true }
 
-    fun handle(frame: Frame.Text) {
+    suspend fun handle(frame: Frame.Text) {
         val data = frame.readText().also { println(it) }
         println("parsing lavlaink $data")
-        val d = parse<Command>(data)
+        val d = node.client.parse<Event>(data)
         // TODO: 16/01/2022
         when (d?.op) {
-            "stats" -> parse<Stats>(data).also { println(it) }.also { node.stats = it }
+            "stats" -> node.client.parse<Stats>(data)?.also { println(it) }.also { node.stats = it }
+            "event" -> process_event(d, data)
+            "PlayerUpdate" -> node.client.parse<PlayerUpdate>(data)?.also { node.players[it.guildId]?.update_player_state(it) }
+
             else -> println("unhandled lavalink command $data")
         }
     }
@@ -81,12 +81,12 @@ class NodeWebsocket(val node: Node) {
         ws?.send(text.toString())
     }
 
-    inline fun <reified T> parse(data: String): T? {
-        return try {
-            pars.decodeFromString<T>(data)
-        } catch (t: Throwable) {
-            println("failed to parse $data, e: $t")
-            null
+    suspend fun process_event(event: Event, data: String) {
+        when (event.type) {
+            "WebSocketClosedEvent" -> node.client.parse<WebSocketClosedEvent>(data).also { }
+            "TrackStuckEvent" -> node.client.parse<TrackStuckEvent>(data)?.also { node.players[it.guildId]?.on_track_stop() }
+            "TrackStartEvent" -> node.client.parse<TrackStartEvent>(data)?.also { }
+            "TrackEndEvent" -> node.client.parse<TrackEndEvent>(data)?.also { node.players[it.guildId]?.on_track_stop() }
         }
     }
-}
+ }

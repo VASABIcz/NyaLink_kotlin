@@ -8,9 +8,11 @@ import lavalink_commands.Stats
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import trackloader.FetchResult
+import trackloader.TrackLoader
+import utils.Que
 
 class Node(val args: AddNode, val client: Client) {
-    var players = HashMap<Int, Player>()
+    var players = HashMap<Long, Player>()
     lateinit var ws: NodeWebsocket
     val available: Boolean
         get() = ws.connected
@@ -35,7 +37,7 @@ class Node(val args: AddNode, val client: Client) {
         val type = if (args.secure) "https" else "http"
 
         repeat(3) {
-            val response: HttpStatement = client.ktor_client.request("${type}://${args.host}:${args.port}/") {
+            val response: HttpStatement = client.ktor_client.request("${type}://${args.host}:${args.port}/loadtracks") {
                 method = HttpMethod.Get
                 parameter("identifier", track)
                 header("Authorization", args.password)
@@ -48,9 +50,10 @@ class Node(val args: AddNode, val client: Client) {
                 println("returning repeat idk")
                 return@repeat
             }
-
             val data = res.readText()
-            client.parse<FetchResult>(data)?.also { return it }
+            val parsed = client.parse<FetchResult>(data)
+            println("parsed track respnse $parsed")
+            return parsed
         }
         return null
     }
@@ -59,5 +62,11 @@ class Node(val args: AddNode, val client: Client) {
         semaphore.withPermit {
             return fetch_track(track)
         }
+    }
+
+    suspend fun create_player(id: Long): Player {
+        val player = Player(this, id)
+        players.put(id, player)
+        return player
     }
 }
