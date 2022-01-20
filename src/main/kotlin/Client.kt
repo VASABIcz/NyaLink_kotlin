@@ -29,8 +29,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
         get() = ws.isActive
 
     suspend fun handle(frame: Frame.Text) {
-        val data = frame.readText().trim().also { println(it) }
-        println("parsing $data")
+        val data = frame.readText().trim()
         val d = parse<Command>(data)
         // TODO: 16/01/2022
         println("recived op: ${d?.op}")
@@ -54,13 +53,13 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
             "skip_to" -> parse<SkiTo>(data)?.also {}
             "voice_state_update" -> parse<VoiceStateUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_state(it) }
             "voice_server_update" -> parse<VoiceServerUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_server(it) }
+            else -> println("unahndled op: ${d?.op} $data")
         }
-        println("after parse")
+        println("after parse ${d?.op}")
     }
 
     suspend fun listen() {
         for (x in ws.incoming) {
-            println("recived from client $id")
             when (x) {
                 is Frame.Text -> GlobalScope.launch { handle(x) }
             }
@@ -68,7 +67,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     }
 
     suspend fun send(text: Any) {
-        println("sending $text")
+        println("sending to client $text")
         ws.send(text.toString())
     }
     

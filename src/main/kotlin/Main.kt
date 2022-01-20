@@ -10,7 +10,6 @@ import trackloader.Cache
 fun main(args: Array<String>) {
     val clients = HashMap<Long, Client>()
     val redis = JedisPooled("127.0.0.1", 6379);
-    println(redis)
     val parser = Json { ignoreUnknownKeys=true }
     val cache = Cache(redis, parser)
 
@@ -18,8 +17,7 @@ fun main(args: Array<String>) {
         install(WebSockets)
         routing {
             webSocket ("/") {
-                println("SUS")
-                println(this.call.request.headers["client"])
+
                 val client = this.call.request.headers["client"]
                 val id = client?.toLongOrNull()
                 if (clients.containsKey(id)){

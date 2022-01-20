@@ -17,14 +17,14 @@ class NodeWebsocket(val node: Node) {
     var ws: DefaultWebSocketSession? = null
 
     suspend fun handle(frame: Frame.Text) {
-        val data = frame.readText().also { println(it) }
-        println("parsing lavlaink $data")
+        val data = frame.readText()
         val d = node.client.parse<Event>(data)
+        println("recived lavalink ${d?.op}")
         // TODO: 16/01/2022
         when (d?.op) {
             "stats" -> node.client.parse<Stats>(data)?.also { println(it) }.also { node.stats = it }
             "event" -> process_event(d, data)
-            "PlayerUpdate" -> node.client.parse<PlayerUpdate>(data)?.also { node.players[it.guildId]?.update_player_state(it) }
+            "playerUpdate" -> node.client.parse<PlayerUpdate>(data)?.also { node.players[it.guildId]?.update_player_state(it) }
 
             else -> println("unhandled lavalink command $data")
         }
@@ -32,7 +32,6 @@ class NodeWebsocket(val node: Node) {
 
     suspend fun listener() {
         for (x in ws?.incoming!!) {
-            println("recived something")
             when (x) {
                 is Frame.Text -> handle(x)
             }

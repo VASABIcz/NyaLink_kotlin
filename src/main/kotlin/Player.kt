@@ -7,6 +7,8 @@ import kotlinx.serialization.json.Json
 import lavalink_commands.PlayerUpdate
 import to_lavlaink_commands.Play as Playc
 import commands.Play
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import to_lavlaink_commands.Stop
 import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
@@ -35,15 +37,16 @@ class Player(val node: Node, val id: Long) {
     var last_update = 0
 
     suspend fun teardown() {
+        println("tearing down player")
         node.players.remove(id)
         loader.teardown()
     }
 
     suspend fun fetch_track(data: Play) {
         loader.send(data)
-        println("sending to worker queue")
+        println("player state playing: ${playing()} waiting: $waiting current $current")
+        println("sending to worker queue ${data.name}")
         do_next()
-        println("doing next")
     }
 
     suspend fun update_voice_state(state: VoiceStateUpdate) {
@@ -62,14 +65,13 @@ class Player(val node: Node, val id: Long) {
     }
 
     suspend fun send_voice() {
-        println("send voice invoke $event $session")
         val e = event ?: return
         val s = session ?: return
 
-        println("sending voice")
+        println("sending voice $event $session")
 
         val d = VoiceUpdate(guildId = id.toString(), sessionId = s.session_id, event = e, op = "voiceUpdate")
-        node.ws.send(Json.encodeToString(d))
+        node.send(Json.encodeToString(d))
     }
 
     suspend fun do_next() {
@@ -78,27 +80,33 @@ class Player(val node: Node, val id: Long) {
         }
         waiting = true
         println("doing next")
-        val res = que.get()
-        que.consume()
-        println("got $res from queue")
-        play(res)
-
+        try {
+            withTimeout(1000*30*1) {
+                val res = que.get()
+                que.consume()
+                println("got $res from queue")
+                play(res)
+            }
+        }
+        catch (t: TimeoutCancellationException) {
+            teardown()
+            return
+        }
         waiting = false
     }
 
     suspend fun play(track: Track) {
-        println("pay invoked $id")
+        println("play invoked $id ${track.info.title}")
         current = track
         last_position = 0
         last_update = 0
 
         val payload = Json.encodeToString(Playc(id.toString(), track.track, op = "play", noReplace = false))
-        println("payload $payload")
         node.send(payload)
     }
 
     suspend fun stop() {
-        node.send(Json.encodeToString(Stop(guildId = id, op = "skip")))
+        node.send(Json.encodeToString(Stop(guildId = id.toString(), op = "stop")))
     }
 
     suspend fun on_track_stop() {

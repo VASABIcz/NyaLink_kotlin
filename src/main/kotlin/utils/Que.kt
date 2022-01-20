@@ -40,12 +40,13 @@ class Que<Any> {
     }
 
     private fun queue_pop(index: Int=0): Any {
-        val x = queue[index].also { queue }
+        val x = queue[index]
         queue.removeAt(index)
         return x
     }
 
     fun consume() {
+        println("consuming $queue")
         when (loop) {
             LoopType.None -> raw_consume()
             LoopType.All -> move_on()
@@ -58,6 +59,7 @@ class Que<Any> {
     }
 
     fun push(item: Any) {
+        println("que ${this.queue} $job $")
         raw_push(item)
         job.complete()
     }

@@ -60,27 +60,28 @@ class TrackLoader(val player: Player) {
     }
 
     suspend fun cache(key: String, value: TrackResult) {
-        cache_client.set(key, Json.encodeToString(value))
+        val s = Json.encodeToString(value)
+        println("caching ${key}")
+        cache_client.set(key, s)
     }
 
     suspend fun send_callback(data: String) {
+        println("sending callback")
         player.node.client.send(data)
     }
 
     suspend fun work() {
-        println("worker setuped for $player.id")
         while (!closed) {
             try {
                 val t = channel.receive().also { println("working on ${it.name}") }
                 val c = maybe_cache(t.name)
                 if (c == null) {
                     var source: String = "unknown"
-                    println("not in cache")
+                    println("fetched ${t.name}")
                     // add more fun
                     val res = when (t.name) {
                         else -> player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch("ytsearch:${t.name}")?.also { source = "idk" }
                     }
-                    println("result $res")
                     if (res != null) {
                         if (res.loadType == "NO_MATCHES") {
                             println("no matches for ${t.name}")
@@ -88,25 +89,23 @@ class TrackLoader(val player: Player) {
                         else {
                             val result = TrackResult(res, source)
                             cache(t.name, result)
-                            println("caching ${t.name}: ${Json.encodeToString(result)}")
-                            send_callback(Json.encodeToString(TrackResult))
-                            result.res.tracks.forEach() {
-                                player.que.push(it)
-                            }
+                            send_callback(Json.encodeToString(result))
+                            player.que.push(result.res.tracks[0])
+                            player.do_next()
                         }
                     }
                 }
                 else {
-                    c.res.tracks.forEach() {
-                        player.que.push(it)
-                    }
+                    println("cached ${t.name}")
+                    player.que.push(c.res.tracks[0])
+                    player.do_next()
                 }
             }
             catch (_: Throwable) {
                 closed = true
             }
         }
-        println("cache nya nya result: ${cache_client.get("nya nya")}")
+    println("cache nya nya result: ${cache_client.get("nya nya")}")
     }
 
     fun teardown() {

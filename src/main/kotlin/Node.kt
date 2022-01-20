@@ -30,6 +30,7 @@ class Node(val args: AddNode, val client: Client) {
     }
 
     suspend fun send(data: String) {
+        println("sending to lavlaink $data")
         ws.send(data)
     }
 
@@ -47,7 +48,7 @@ class Node(val args: AddNode, val client: Client) {
             val res = response.execute()
 
             if (res.status.value != 200) {
-                println("returning repeat idk")
+                println("track load returned $track ${res.status.value}")
                 return@repeat
             }
             val data = res.readText()
