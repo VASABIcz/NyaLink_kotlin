@@ -6,5 +6,5 @@ import kotlinx.serialization.Serializable
 data class FetchResult(
     val loadType: String,
     val playlistInfo: PlaylistInfo,
-    val tracks: List<Track>
+    var tracks: List<Track>
 )

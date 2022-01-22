@@ -19,7 +19,7 @@ class NodeWebsocket(val node: Node) {
     suspend fun handle(frame: Frame.Text) {
         val data = frame.readText()
         val d = node.client.parse<Event>(data)
-        println("recived lavalink ${d?.op}")
+        d?.op?.also { if (it != "playerUpdate") println("recived lavalink $it") }
         // TODO: 16/01/2022
         when (d?.op) {
             "stats" -> node.client.parse<Stats>(data)?.also { println(it) }.also { node.stats = it }
@@ -76,7 +76,7 @@ class NodeWebsocket(val node: Node) {
     }
 
     suspend fun send(text: Any) {
-        println("sending $text")
+        println("sending lavalink $text")
         ws?.send(text.toString())
     }
 

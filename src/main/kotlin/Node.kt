@@ -21,7 +21,7 @@ class Node(val args: AddNode, val client: Client) {
 
     suspend fun connect() {
         ws = NodeWebsocket(this)
-        coroutineScope { launch { ws.connect() } }
+        ws.connect()
     }
     
     suspend fun teardown() {
@@ -30,7 +30,6 @@ class Node(val args: AddNode, val client: Client) {
     }
 
     suspend fun send(data: String) {
-        println("sending to lavlaink $data")
         ws.send(data)
     }
 

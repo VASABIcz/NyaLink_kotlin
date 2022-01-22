@@ -17,6 +17,7 @@ class Que<Any> {
     suspend fun get(): Any {
         if (queue.size == 0) {
             await_job()
+            println(queue)
         }
 
         return queue[0]
@@ -27,6 +28,9 @@ class Que<Any> {
     }
 
     private suspend fun await_job() {
+        if (!job.isActive) {
+            job = Job()
+        }
         job.join()
         job = Job()
     }
@@ -46,7 +50,7 @@ class Que<Any> {
     }
 
     fun consume() {
-        println("consuming $queue")
+        println("consuming $loop $queue")
         when (loop) {
             LoopType.None -> raw_consume()
             LoopType.All -> move_on()
@@ -61,6 +65,7 @@ class Que<Any> {
     fun push(item: Any) {
         println("que ${this.queue} $job $")
         raw_push(item)
+        println("pushed $item")
         job.complete()
     }
 

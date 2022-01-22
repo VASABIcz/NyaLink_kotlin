@@ -3,4 +3,4 @@ package commands
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class DestroyPlayer(val guild: Double)
+data class DestroyPlayer(val guild: Long)

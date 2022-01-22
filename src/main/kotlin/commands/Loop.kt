@@ -4,7 +4,7 @@ import utils.LoopType
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class Loop(val guild: Double, val loop: Int) {
+data class Loop(val guild: Long, val loop: Int) {
     val type: LoopType
         get() {return when (loop) {
             0 -> LoopType.None

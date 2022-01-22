@@ -48,6 +48,7 @@ class TrackLoader(val player: Player) {
     val channel = Channel<Play>()
     var closed = false
     val cache_client = player.node.client.cache
+    val regex = Regex("https?://(www\\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)")
 
 
     suspend fun send(track: Play) {
@@ -70,34 +71,79 @@ class TrackLoader(val player: Player) {
         player.node.client.send(data)
     }
 
+    suspend fun fetch_search(t: Play) {
+        val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch("ytsearch:${t.name}")
+
+        if (res != null) {
+            if (res.loadType == "NO_MATCHES") {
+                println("no matches for ${t.name}")
+            }
+            else {
+                res.tracks = listOf(res.tracks[0])
+                val result = TrackResult(res, res.tracks[0].info.sourceName)
+                cache(t.name, result)
+                send_callback(Json.encodeToString(result))
+                player.que.push(result.res.tracks[0])
+                player.do_next()
+            }
+        }
+    }
+
+    suspend fun fetch_url(t: Play) {
+        val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch(t.name)
+
+        if (res != null) {
+            if (res.loadType == "NO_MATCHES") {
+                println("no matches for ${t.name}")
+            }
+            else {
+                val result = TrackResult(res, res.tracks[0].info.sourceName)
+                cache(t.name, result)
+                send_callback(Json.encodeToString(result))
+                if (!player.waiting || !player.playing()) {
+                    // TODO: 22/01/2022 maybe bad idk rn
+                    player.do_next()
+                }
+                result.res.tracks.forEach() {
+                    player.que.push(it)
+                }
+            }
+        }
+    }
+
+    suspend fun fetch_spotify() {
+
+    }
+
     suspend fun work() {
         while (!closed) {
             try {
                 val t = channel.receive().also { println("working on ${it.name}") }
+                var res: FetchResult?
+                var source: String = "unknown"
+
                 val c = maybe_cache(t.name)
+
+                // TODO: 22/01/2022 this is so bad
                 if (c == null) {
-                    var source: String = "unknown"
                     println("fetched ${t.name}")
-                    // add more fun
-                    val res = when (t.name) {
-                        else -> player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch("ytsearch:${t.name}")?.also { source = "idk" }
+
+                    if (t.name.matches(regex)) {
+                        fetch_url(t)
                     }
-                    if (res != null) {
-                        if (res.loadType == "NO_MATCHES") {
-                            println("no matches for ${t.name}")
-                        }
-                        else {
-                            val result = TrackResult(res, source)
-                            cache(t.name, result)
-                            send_callback(Json.encodeToString(result))
-                            player.que.push(result.res.tracks[0])
-                            player.do_next()
-                        }
+                    else {
+                        fetch_search(t)
                     }
                 }
                 else {
                     println("cached ${t.name}")
-                    player.que.push(c.res.tracks[0])
+                    if (!player.waiting || !player.playing()) {
+                        // TODO: 22/01/2022 maybe bad idk rn
+                        player.do_next()
+                    }
+                    c.res.tracks.forEach() {
+                        player.que.push(it)
+                    }
                     player.do_next()
                 }
             }
@@ -110,5 +156,6 @@ class TrackLoader(val player: Player) {
 
     fun teardown() {
         closed = true
+        channel.close()
     }
 }

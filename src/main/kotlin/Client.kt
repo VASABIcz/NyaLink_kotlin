@@ -34,25 +34,24 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
         // TODO: 16/01/2022
         println("recived op: ${d?.op}")
         when (d?.op) {
-            // debug
-            "debug" -> parse<Play>(data)?.also { GlobalScope.launch { play(it) } }
-            // nodes
-            "add_node" -> parse<AddNode>(data)?.also { GlobalScope.launch { add_node(it) } }
-            "remove_node" -> parse<RemoveNode>(data)?.also { GlobalScope.launch { remove_node(it) }}
-            // player
-            "destroy" -> parse<DestroyPlayer>(data)?.also {}
-            "clear" -> parse<Clear>(data)?.also {}
-            "skip" -> parse<Skip>(data)?.also { get_player(it.guild)?.stop() }
-            "shuffle" -> parse<Shuffle>(data)?.also {}
-            "revind" -> parse<Revind>(data)?.also {}
-            "play" -> parse<Play>(data)?.also { GlobalScope.launch { play(it) } }
-            "pause" -> parse<Pause>(data)?.also {}
-            "remove" -> parse<Remove>(data)?.also {}
-            "seek" -> parse<Seek>(data)?.also {}
-            "loop" -> parse<Loop>(data)?.also {}
-            "skip_to" -> parse<SkiTo>(data)?.also {}
+            // voice
             "voice_state_update" -> parse<VoiceStateUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_state(it) }
             "voice_server_update" -> parse<VoiceServerUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_server(it) }
+            // nodes
+            "add_node" -> parse<AddNode>(data)?.also { GlobalScope.launch { add_node(it) } }
+            "remove_node" -> parse<RemoveNode>(data)?.also { remove_node(it) }
+            // player
+            "destroy" -> parse<DestroyPlayer>(data)?.also { players()[it.guild]?.teardown() }
+            "clear" -> parse<Clear>(data)?.also { players()[it.guild]?.que?.clear() }
+            "skip" -> parse<Skip>(data)?.also { get_player(it.guild)?.stop() }
+            "shuffle" -> parse<Shuffle>(data)?.also { players()[it.guild]?.que?.shuffle() }
+            "play" -> parse<Play>(data)?.also { get_player(it.guild)?.fetch_track(it) }
+            "pause" -> parse<Pause>(data)?.also { players()[it.guild]?.send_pause(it) }
+            "seek" -> parse<Seek>(data)?.also { players()[it.guild]?.send_seek(it) }
+            "loop" -> parse<Loop>(data)?.also { players()[it.guild]?.que?.loop = it.type}
+            "revind" -> parse<Revind>(data)?.also {}
+            "skip_to" -> parse<SkiTo>(data)?.also {}
+            "remove" -> parse<Remove>(data)?.also {}
             else -> println("unahndled op: ${d?.op} $data")
         }
         println("after parse ${d?.op}")
@@ -61,7 +60,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     suspend fun listen() {
         for (x in ws.incoming) {
             when (x) {
-                is Frame.Text -> GlobalScope.launch { handle(x) }
+                is Frame.Text -> handle(x)
             }
         }
     }
@@ -119,9 +118,5 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
 
     suspend fun get_player(id: Long): Player? {
         return players()[id] ?: create_player(id)
-    }
-
-    suspend fun play(data: Play) {
-        get_player(data.guild)?.fetch_track(data)
     }
 }
