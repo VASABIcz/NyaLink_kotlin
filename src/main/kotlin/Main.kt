@@ -9,6 +9,7 @@ import redis.clients.jedis.JedisPooled
 import trackloader.Cache
 import kotlin.system.exitProcess
 
+// TODO: 23/01/2022 for some reason multiple clients are buggy
 fun main() {
     val redis_url = System.getenv("REDIS_URL") ?: System.err.println("REDIS_URL not provided").let { exitProcess(1) }
     val redis_port =
