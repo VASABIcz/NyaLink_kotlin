@@ -23,7 +23,6 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     val best_node_players: Node?
         get() = available_nodes.minByOrNull { node -> node.players.size }
 
-    //todo
     val best_node_fetch: Node?
         get() = available_nodes.maxByOrNull { node -> node.semaphore.availablePermits }
 
@@ -33,7 +32,6 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     suspend fun handle(frame: Frame.Text) {
         val data = frame.readText().trim()
         val d = parse<Command>(data)
-        // TODO: 16/01/2022
         println("recived op: ${d?.op}")
         when (d?.op) {
             // voice

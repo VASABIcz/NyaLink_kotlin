@@ -19,7 +19,6 @@ class NodeWebsocket(val node: Node) {
         val data = frame.readText()
         val d = node.client.parse<Event>(data)
         d?.op?.also { if (it != "playerUpdate") println("recived lavalink $it") }
-        // TODO: 16/01/2022
         when (d?.op) {
             "stats" -> node.client.parse<Stats>(data)?.also { println(it) }.also { node.stats = it }
             "event" -> process_event(d, data)

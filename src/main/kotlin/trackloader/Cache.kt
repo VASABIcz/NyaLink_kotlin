@@ -7,7 +7,6 @@ import kotlinx.serialization.json.Json
 import redis.clients.jedis.JedisPooled
 
 
-// TODO: 19/01/2022 make async
 class Cache(private val cache: JedisPooled, val parser: Json) {
 
     suspend fun get(key: String): String? = withContext(Dispatchers.IO) {

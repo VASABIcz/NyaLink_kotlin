@@ -27,7 +27,7 @@ class Node(val args: AddNode, val client: Client) {
 
     suspend fun teardown(data: RemoveNode) {
         client.nodes.remove(data.identifier)
-        ws.teardown() // TODO: 16/01/2022 add move players on teardown
+        ws.teardown()
         players.values.forEach {
             it.teardown()
         }

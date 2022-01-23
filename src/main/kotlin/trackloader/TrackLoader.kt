@@ -46,6 +46,7 @@ queue picks it
         add to queue
 */
 
+// TODO: 23/01/2022 implemnt spotify 
 class TrackLoader(val player: Player) {
     var channel = Channel<Play>()
     var closed = false
@@ -80,8 +81,7 @@ class TrackLoader(val player: Player) {
         if (res != null) {
             if (res.loadType == "NO_MATCHES") {
                 println("no matches for ${t.name}")
-            }
-            else {
+            } else {
                 res.tracks = listOf(res.tracks[0])
                 val result = TrackResult(res, res.tracks[0].info.sourceName)
                 cache(t.name, result)
@@ -98,8 +98,7 @@ class TrackLoader(val player: Player) {
         if (res != null) {
             if (res.loadType == "NO_MATCHES") {
                 println("no matches for ${t.name}")
-            }
-            else {
+            } else {
                 val result = TrackResult(res, res.tracks[0].info.sourceName)
                 cache(t.name, result)
                 send_callback(Json.encodeToString(result))
@@ -126,17 +125,15 @@ class TrackLoader(val player: Player) {
                 val c = maybe_cache(t.name)
 
                 // TODO: 22/01/2022 this is so bad
-                if (c == null) {
+                if (c == null || !t.cache) {
                     println("fetched ${t.name}")
 
                     if (t.name.matches(regex)) {
                         fetch_url(t)
-                    }
-                    else {
+                    } else {
                         fetch_search(t)
                     }
-                }
-                else {
+                } else {
                     println("cached ${t.name}")
                     if (!player.waiting || !player.playing()) {
                         // TODO: 22/01/2022 maybe bad idk rn
@@ -147,8 +144,7 @@ class TrackLoader(val player: Player) {
                     }
                     player.do_next()
                 }
-            }
-            catch (_: Throwable) {
+            } catch (_: Throwable) {
             }
         }
     }
