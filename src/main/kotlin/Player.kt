@@ -1,24 +1,21 @@
 import commands.*
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import lavalink_commands.PlayerUpdate
-import to_lavlaink_commands.Play as Playl
-import to_lavlaink_commands.Seek as Seekl
-import to_lavlaink_commands.Volume as Volumel
-import to_lavlaink_commands.Pause as Pausel
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import to_lavlaink_commands.Stop
 import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
 import trackloader.TrackLoader
-import utils.LoopType
 import utils.Que
+import to_lavlaink_commands.Pause as Pausel
+import to_lavlaink_commands.Play as Playl
+import to_lavlaink_commands.Seek as Seekl
 
+// TODO: 22/01/2022 small todo FIX THIS FUCKING MESS + TRACK-LOADER MESS :D
 class Player(val node: Node, val id: Long) {
-    val loader: TrackLoader = TrackLoader(this).also { GlobalScope.launch { it.work() } }
+    val scope = CoroutineScope(Dispatchers.Default)
+    val loader: TrackLoader = TrackLoader(this).also { scope.launch { it.work() } }
     var que: Que<Track> = Que()
 
     var session: VoiceStateUpdate? = null
@@ -31,15 +28,15 @@ class Player(val node: Node, val id: Long) {
             return true
         }
         return false
-
     }
 
     var current: Track? = null
     var last_position = 0
     var last_update = 0
 
-    suspend fun teardown() {
+    fun teardown() {
         println("tearing down player")
+        scope.cancel()
         node.players.remove(id)
         loader.teardown()
         println(node.players)
@@ -63,12 +60,10 @@ class Player(val node: Node, val id: Long) {
             teardown()
             session = state
             send_voice()
-        }
-        else if (state.channel_id != session?.channel_id) {
+        } else if (state.channel_id != session?.channel_id) {
             session = state
             send_voice()
-        }
-        else if (state.session_id != session?.session_id) {
+        } else if (state.session_id != session?.session_id) {
             session = state
             send_voice()
         }
@@ -79,7 +74,7 @@ class Player(val node: Node, val id: Long) {
         send_voice()
     }
 
-    suspend fun update_player_state(data: PlayerUpdate) {
+    fun update_player_state(data: PlayerUpdate) {
 
     }
 
@@ -98,13 +93,12 @@ class Player(val node: Node, val id: Long) {
         waiting = true
         println("doing next")
         try {
-            withTimeout(1000*30*1) {
+            withTimeout(1000 * 30 * 1) {
                 val res = que.get()
                 println("got $res from queue")
                 send_play(res)
             }
-        }
-        catch (t: TimeoutCancellationException) {
+        } catch (t: TimeoutCancellationException) {
             teardown()
             return
         }
@@ -133,13 +127,19 @@ class Player(val node: Node, val id: Long) {
 
     suspend fun send_pause(data: Pause) {
         println("sending pause ${data.pause} $id")
-        val payload = Json.encodeToString(Pausel(op="pause", guildId = id.toString(), data.pause))
+        val payload = Json.encodeToString(Pausel(op = "pause", guildId = id.toString(), data.pause))
         node.send(payload)
     }
 
     suspend fun send_seek(data: Seek) {
-        println("sending seek ${data.time/1000/60}m $id")
-        val payload = Json.encodeToString(Seekl(op="seek", guildId = id.toString(), data.time))
+        println("sending seek ${data.time / 1000 / 60}m $id")
+        val payload = Json.encodeToString(Seekl(op = "seek", guildId = id.toString(), data.time))
         node.send(payload)
+    }
+
+    suspend fun clear() {
+        loader.clear()
+        que.clear()
+        stop()
     }
 }

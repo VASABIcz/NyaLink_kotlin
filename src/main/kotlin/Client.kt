@@ -2,15 +2,18 @@ import commands.*
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.http.cio.websocket.*
-import kotlinx.coroutines.*
-import kotlinx.serialization.*
-import kotlinx.serialization.json.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import trackloader.Cache
 
 
-@OptIn(DelicateCoroutinesApi::class)
 class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, val cache: Cache) {
     var nodes = HashMap<String, Node>()
+    val scope =  CoroutineScope(Dispatchers.Default)
     val ktor_client = HttpClient(CIO) {
         install(io.ktor.client.features.websocket.WebSockets)
     }
@@ -38,11 +41,11 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
             "voice_state_update" -> parse<VoiceStateUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_state(it) }
             "voice_server_update" -> parse<VoiceServerUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_server(it) }
             // nodes
-            "add_node" -> parse<AddNode>(data)?.also { GlobalScope.launch { add_node(it) } }
+            "add_node" -> parse<AddNode>(data)?.also { add_node(it) }
             "remove_node" -> parse<RemoveNode>(data)?.also { remove_node(it) }
             // player
             "destroy" -> parse<DestroyPlayer>(data)?.also { players()[it.guild]?.teardown() }
-            "clear" -> parse<Clear>(data)?.also { players()[it.guild]?.que?.clear() }
+            "clear" -> parse<Clear>(data)?.also { players()[it.guild]?.clear() }
             "skip" -> parse<Skip>(data)?.also { get_player(it.guild)?.stop() }
             "shuffle" -> parse<Shuffle>(data)?.also { players()[it.guild]?.que?.shuffle() }
             "play" -> parse<Play>(data)?.also { get_player(it.guild)?.fetch_track(it) }
@@ -51,7 +54,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
             "loop" -> parse<Loop>(data)?.also { players()[it.guild]?.que?.loop = it.type}
             "revind" -> parse<Revind>(data)?.also {}
             "skip_to" -> parse<SkiTo>(data)?.also {}
-            "remove" -> parse<Remove>(data)?.also {}
+            "remove" -> parse<Remove>(data)?.also { players()[it.guild]?.que?.remove(it.index) }
             else -> println("unahndled op: ${d?.op} $data")
         }
         println("after parse ${d?.op}")
@@ -60,7 +63,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     suspend fun listen() {
         for (x in ws.incoming) {
             when (x) {
-                is Frame.Text -> handle(x)
+                is Frame.Text -> scope.launch { handle(x) }
             }
         }
     }
@@ -103,8 +106,8 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     fun players(): HashMap<Long, Player> {
         val players = HashMap<Long, Player>()
 
-        available_nodes.forEach() {
-            it.players.values.forEach() {
+        available_nodes.forEach {
+            it.players.values.forEach {
                 players.put(it.id, it)
             }
         }

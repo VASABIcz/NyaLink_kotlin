@@ -1,6 +1,6 @@
 package utils
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Job
 
 class Que<Any> {
     private var queue = emptyList<Any>().toMutableList()
@@ -49,12 +49,20 @@ class Que<Any> {
         return x
     }
 
+    fun remove(index: Int) {
+        if (index in 1..size) {
+            queue.removeAt(index)
+        }
+    }
+
     fun consume() {
         println("consuming $loop $queue")
-        when (loop) {
-            LoopType.None -> raw_consume()
-            LoopType.All -> move_on()
-            LoopType.One -> {}
+        if (queue.size > 0) {
+            when (loop) {
+                LoopType.None -> raw_consume()
+                LoopType.All -> move_on()
+                LoopType.One -> {}
+            }
         }
     }
 
@@ -84,8 +92,12 @@ class Que<Any> {
         }
     }
 
+    fun add(data: Collection<Any>) {
+        queue.addAll(data)
+        job.complete()
+    }
+
     fun slice(start: Int, end: Int): List<Any> {
         return queue.slice(start..end)
     }
-
 }

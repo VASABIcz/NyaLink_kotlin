@@ -2,9 +2,12 @@ package trackloader
 
 import Player
 import commands.Play
+import commands.PlayCallback
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import javax.naming.Context
 
 /*
 https://github.com/rrva/coredis
@@ -45,10 +48,11 @@ queue picks it
 */
 
 class TrackLoader(val player: Player) {
-    val channel = Channel<Play>()
+    var channel = Channel<Play>()
     var closed = false
     val cache_client = player.node.client.cache
     val regex = Regex("https?://(www\\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)")
+    var worker = player.scope.launch { work() }
 
 
     suspend fun send(track: Play) {
@@ -82,7 +86,7 @@ class TrackLoader(val player: Player) {
                 res.tracks = listOf(res.tracks[0])
                 val result = TrackResult(res, res.tracks[0].info.sourceName)
                 cache(t.name, result)
-                send_callback(Json.encodeToString(result))
+                send_callback(Json.encodeToString(PlayCallback(result, t.requester, t.channel)))
                 player.que.push(result.res.tracks[0])
                 player.do_next()
             }
@@ -104,9 +108,7 @@ class TrackLoader(val player: Player) {
                     // TODO: 22/01/2022 maybe bad idk rn
                     player.do_next()
                 }
-                result.res.tracks.forEach() {
-                    player.que.push(it)
-                }
+                player.que.add(res.tracks)
             }
         }
     }
@@ -141,21 +143,26 @@ class TrackLoader(val player: Player) {
                         // TODO: 22/01/2022 maybe bad idk rn
                         player.do_next()
                     }
-                    c.res.tracks.forEach() {
+                    c.res.tracks.forEach {
                         player.que.push(it)
                     }
                     player.do_next()
                 }
             }
             catch (_: Throwable) {
-                closed = true
             }
         }
-    println("cache nya nya result: ${cache_client.get("nya nya")}")
     }
 
     fun teardown() {
         closed = true
         channel.close()
+    }
+
+    fun clear() {
+        channel.close()
+        worker.cancel()
+        channel = Channel()
+        worker = player.scope.launch { work() }
     }
 }

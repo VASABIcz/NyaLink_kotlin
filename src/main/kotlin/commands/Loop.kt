@@ -1,7 +1,7 @@
 package commands
 
-import utils.LoopType
 import kotlinx.serialization.Serializable
+import utils.LoopType
 
 @Serializable
 data class Loop(val guild: Long, val loop: Int) {

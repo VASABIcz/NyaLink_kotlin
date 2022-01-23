@@ -2,16 +2,17 @@ import commands.AddNode
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import lavalink_commands.Stats
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import lavalink_commands.Stats
 import trackloader.FetchResult
-import trackloader.TrackLoader
-import utils.Que
 
 class Node(val args: AddNode, val client: Client) {
+    val scope = CoroutineScope(Dispatchers.Default)
     var players = HashMap<Long, Player>()
     lateinit var ws: NodeWebsocket
     val available: Boolean
@@ -26,6 +27,10 @@ class Node(val args: AddNode, val client: Client) {
     
     suspend fun teardown() {
         ws.teardown() // TODO: 16/01/2022 add move players on teardown
+        players.values.forEach() {
+            it.teardown()
+        }
+        scope.cancel()
         println("teardown node ${args.identifier}")
     }
 
@@ -64,7 +69,7 @@ class Node(val args: AddNode, val client: Client) {
         }
     }
 
-    suspend fun create_player(id: Long): Player {
+    fun create_player(id: Long): Player {
         val player = Player(this, id)
         players.put(id, player)
         return player

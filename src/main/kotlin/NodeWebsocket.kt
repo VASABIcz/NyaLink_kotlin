@@ -1,4 +1,3 @@
-import commands.Command
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.features.websocket.*
@@ -39,32 +38,34 @@ class NodeWebsocket(val node: Node) {
     }
 
     suspend fun connect() {
-        var repeats = 0
-        while (!connected and !closed) {
-            println("connecting to ${node.args.identifier} ${node.args}")
-            val client = HttpClient(CIO) {
-                install(WebSockets)
-            }
-            try {
-                client.webSocket(method = HttpMethod.Get, host = node.args.host, port = node.args.port, request = {
-                    header("Authorization", node.args.password)
-                    header("User-Id", node.client.id.toString())
-                    header("Client-Name", "NyaLink_kotlin")
-                }) {
-                    ws = this@webSocket
-                    withContext(Dispatchers.Default) { listener() }
-                    println("closing lavalink ws ${node.args.identifier}")
-                    return@webSocket
+        node.scope.launch {
+            var repeats = 0
+            while (!connected and !closed) {
+                println("connecting to ${node.args.identifier} ${node.args}")
+                val client = HttpClient(CIO) {
+                    install(WebSockets)
                 }
-            }
-            catch (e: Throwable) {
-                println("ws exception ${node.args.identifier} $e")
-                if (repeats > 5) {
-                    println("failed to connect/reconnect ${node.args.identifier}")
-                    return
+                try {
+                    client.webSocket(method = HttpMethod.Get, host = node.args.host, port = node.args.port, request = {
+                        header("Authorization", node.args.password)
+                        header("User-Id", node.client.id.toString())
+                        header("Client-Name", "NyaLink_kotlin")
+                    }) {
+                        ws = this@webSocket
+                        withContext(Dispatchers.Default) { listener() }
+                        println("closing lavalink ws ${node.args.identifier}")
+                        return@webSocket
+                    }
                 }
-                delay(1000)
-                repeats += 1
+                catch (e: Throwable) {
+                    println("ws exception ${node.args.identifier} $e")
+                    if (repeats > 5) {
+                        println("failed to connect/reconnect ${node.args.identifier}")
+                        return@launch
+                    }
+                    delay(1000)
+                    repeats += 1
+                }
             }
         }
     }
@@ -81,6 +82,7 @@ class NodeWebsocket(val node: Node) {
     }
 
     suspend fun process_event(event: Event, data: String) {
+        println(event)
         when (event.type) {
             "WebSocketClosedEvent" -> node.client.parse<WebSocketClosedEvent>(data).also { }
             "TrackStuckEvent" -> node.client.parse<TrackStuckEvent>(data)?.also { node.players[it.guildId]?.on_track_stop() }
