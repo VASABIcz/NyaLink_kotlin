@@ -27,13 +27,6 @@ class Cache(private val cache: JedisPooled, val parser: Json) {
         return null
     }
 
-    suspend fun get_parsed(keu: String): TrackResult? {
-        var res: TrackResult? = null
-        get(keu)?.also { res = parse<TrackResult>(it) }
-
-        return res
-    }
-
     suspend fun set(key: String, value: String) = withContext(Dispatchers.IO) {
         trytimes {
             cache.set(key, value)
@@ -50,7 +43,7 @@ class Cache(private val cache: JedisPooled, val parser: Json) {
         return@coroutineScope try {
             parser.decodeFromString<T>(data)
         } catch (t: Throwable) {
-            println("failed to parse $data")
+            println("failed to parse: $data\nerror: $t")
             null
         }
     }

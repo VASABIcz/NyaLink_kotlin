@@ -57,6 +57,7 @@ class Node(val args: AddNode, val client: Client) {
                 return@repeat
             }
             val data = res.readText()
+            println("parsing track data $data")
             val parsed = client.parse<FetchResult>(data)
             println("parsed track respnse $parsed")
             return parsed

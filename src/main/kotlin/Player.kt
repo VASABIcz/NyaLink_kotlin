@@ -6,6 +6,7 @@ import lavalink_commands.PlayerUpdate
 import to_lavlaink_commands.Stop
 import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
+import trackloader.TrackCallback
 import trackloader.TrackLoader
 import utils.Que
 import to_lavlaink_commands.Pause as Pausel
@@ -45,7 +46,6 @@ class Player(var node: Node, val id: Long) {
         loader.send(data)
         println("player state playing: ${playing()} waiting: $waiting current $current")
         println("sending to worker queue ${data.name}")
-        do_next()
     }
 
     suspend fun update_voice_state(state: VoiceStateUpdate) {
@@ -151,5 +151,19 @@ class Player(var node: Node, val id: Long) {
         } else {
             node.client.best_node_players?.also { node = it }?.also { it.players[id] = this@Player }
         }
+    }
+
+    suspend fun send_callback(data: NowPlaying) {
+        node.client.send(
+            Json.encodeToString(
+                TrackCallback(
+                    "track_result",
+                    current ?: return,
+                    data.requester,
+                    data.channel,
+                    data.guild
+                )
+            )
+        )
     }
 }

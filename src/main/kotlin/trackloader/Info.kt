@@ -8,8 +8,8 @@ data class Info(
     val identifier: String,
     val isSeekable: Boolean,
     val isStream: Boolean,
-    val length: Int,
-    val position: Int,
+    val length: Long,
+    val position: Long,
     val sourceName: String,
     val title: String,
     val uri: String

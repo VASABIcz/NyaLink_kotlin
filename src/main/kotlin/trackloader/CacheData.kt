@@ -3,4 +3,4 @@ package trackloader
 import kotlinx.serialization.Serializable
 
 @Serializable
-class PlaylistInfo
+data class CacheData(val tracks: List<Track>, val timestamp: Long)

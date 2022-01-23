@@ -2,49 +2,10 @@ package trackloader
 
 import Player
 import commands.Play
-import commands.PlayCallback
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-
-/*
-https://github.com/rrva/coredis
-
-
-structure
-
-request:
-    name: nya nya
-    channel: 123
-
-Track
-    generic track data (id, name, ...)
-
-Result
-    tracks [Track]
-    source: spot/sc/yt
-    type track/playlist
-    image
-    title
-
-incoming request:
-
-parse it to class
-add to player fetch queue
-queue picks it
-    check if in cache or should be fetched
-        read cahche
-    else
-        check if its any of spuported urls else just ytsearch:
-        find the best nody by available permits
-        aquire node semaphore permit
-        await fetch
-    if not null
-        parse
-        send response to cahnnel
-        add to queue
-*/
 
 // TODO: 23/01/2022 implemnt spotify 
 class TrackLoader(val player: Player) {
@@ -59,14 +20,14 @@ class TrackLoader(val player: Player) {
         channel.send(track)
     }
 
-    suspend fun maybe_cache(data: String): TrackResult? {
+    suspend fun maybe_cache(data: String): CacheData? {
         println("checking cache for $data")
-        return cache_client.get(data)?.also { send_callback(it) }?.let { player.node.client.parse<TrackResult>(it) }
+        return cache_client.get(data)?.let { player.node.client.parse<CacheData>(it) }
     }
 
-    suspend fun cache(key: String, value: TrackResult) {
+    suspend fun cache(key: String, value: CacheData) {
         val s = Json.encodeToString(value)
-        println("caching ${key}")
+        println("caching $key")
         cache_client.set(key, s)
     }
 
@@ -75,73 +36,74 @@ class TrackLoader(val player: Player) {
         player.node.client.send(data)
     }
 
-    suspend fun fetch_search(t: Play) {
-        val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch("ytsearch:${t.name}")
+    suspend fun fetch_search(t: Play): CacheData? {
+        val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }
+            ?.limit_fetch("ytsearch:${t.name}")
 
         if (res != null) {
-            if (res.loadType == "NO_MATCHES") {
+            return if (res.loadType == "NO_MATCHES") {
                 println("no matches for ${t.name}")
+                null
             } else {
-                res.tracks = listOf(res.tracks[0])
-                val result = TrackResult(res, res.tracks[0].info.sourceName)
-                cache(t.name, result)
-                send_callback(Json.encodeToString(PlayCallback(result, t.requester, t.channel)))
-                player.que.push(result.res.tracks[0])
-                player.do_next()
+                println("parsing to cache format ${t.name}")
+                CacheData(listOf(res.tracks[0]), System.currentTimeMillis())//.also { cache(t.name, it) }
             }
         }
+        return null
     }
 
-    suspend fun fetch_url(t: Play) {
+    suspend fun fetch_url(t: Play): CacheData? {
         val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch(t.name)
 
         if (res != null) {
             if (res.loadType == "NO_MATCHES") {
                 println("no matches for ${t.name}")
+                return null
             } else {
-                val result = TrackResult(res, res.tracks[0].info.sourceName)
-                cache(t.name, result)
-                send_callback(Json.encodeToString(result))
-                if (!player.waiting || !player.playing()) {
-                    // TODO: 22/01/2022 maybe bad idk rn
-                    player.do_next()
-                }
-                player.que.add(res.tracks)
+                println("parsing to cache format ${t.name}")
+                return CacheData(res.tracks, System.currentTimeMillis())//.also { cache(t.name, it) }
             }
         }
+        return null
     }
 
-    suspend fun fetch_spotify() {
+    suspend fun process(data: Play): CacheData? {
+        val cache = maybe_cache(data.name)
 
+        return if (cache == null || !data.cache) {
+            println("fetched ${data.name}")
+
+            if (data.name.matches(regex)) {
+                fetch_url(data).also { println("fetch_url res $it") }
+                    ?.also { player.scope.launch { cache(data.name, it) } }
+            } else {
+                fetch_search(data).also { println("fetch_url res $it") }
+                    ?.also { player.scope.launch { cache(data.name, it) } }
+            }
+        } else {
+            println("cached ${data.cache}")
+            cache
+        }
     }
 
     suspend fun work() {
         while (!closed) {
             try {
-                val t = channel.receive().also { println("working on ${it.name}") }
+                val data = channel.receive().also { println("working on ${it.name}") }
 
-                val c = maybe_cache(t.name)
+                val result = process(data)
+                println("after processing ${data.name} $result")
+                result ?: return
 
-                // TODO: 22/01/2022 this is so bad
-                if (c == null || !t.cache) {
-                    println("fetched ${t.name}")
+                player.scope.launch { player.do_next() }
+                player.que.add(result.tracks)
 
-                    if (t.name.matches(regex)) {
-                        fetch_url(t)
-                    } else {
-                        fetch_search(t)
-                    }
-                } else {
-                    println("cached ${t.name}")
-                    if (!player.waiting || !player.playing()) {
-                        // TODO: 22/01/2022 maybe bad idk rn
-                        player.do_next()
-                    }
-                    c.res.tracks.forEach {
-                        player.que.push(it)
-                    }
-                    player.do_next()
+                player.scope.launch {
+                    val callback =
+                        TrackCallback("track_result", result.tracks[0], data.requester, data.channel, data.guild)
+                    send_callback(Json.encodeToString(callback))
                 }
+
             } catch (_: Throwable) {
             }
         }
