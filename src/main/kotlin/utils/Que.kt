@@ -2,6 +2,8 @@ package utils
 
 import kotlinx.coroutines.Job
 
+// FIXME: 23/01/2022 not working
+// FIXME: 23/01/2022 play skips whole queue for some reason
 class Que<Any> {
     private var queue = emptyList<Any>().toMutableList()
     private var job = Job()
@@ -14,6 +16,7 @@ class Que<Any> {
     val size: Int
         get() = queue.size
 
+    // FIXME: 23/01/2022 erroring here  
     suspend fun get(): Any {
         if (queue.size == 0) {
             await_job()
