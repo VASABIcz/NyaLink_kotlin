@@ -1,10 +1,10 @@
 import commands.AddNode
+import commands.RemoveNode
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -24,10 +24,11 @@ class Node(val args: AddNode, val client: Client) {
         ws = NodeWebsocket(this)
         ws.connect()
     }
-    
-    suspend fun teardown() {
+
+    suspend fun teardown(data: RemoveNode) {
+        client.nodes.remove(data.identifier)
         ws.teardown() // TODO: 16/01/2022 add move players on teardown
-        players.values.forEach() {
+        players.values.forEach {
             it.teardown()
         }
         scope.cancel()

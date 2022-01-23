@@ -1,5 +1,6 @@
 package trackloader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -29,8 +30,8 @@ class Cache(private val cache: JedisPooled, val parser: Json) {
         cache.del(key)
     }
 
-    inline fun <reified T> parse(data: String): T? {
-        return try {
+    suspend inline fun <reified T> parse(data: String): T? = coroutineScope {
+        return@coroutineScope try {
             parser.decodeFromString<T>(data)
         } catch (t: Throwable) {
             println("failed to parse $data")

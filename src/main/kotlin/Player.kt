@@ -13,7 +13,7 @@ import to_lavlaink_commands.Play as Playl
 import to_lavlaink_commands.Seek as Seekl
 
 // TODO: 22/01/2022 small todo FIX THIS FUCKING MESS + TRACK-LOADER MESS :D
-class Player(val node: Node, val id: Long) {
+class Player(var node: Node, val id: Long) {
     val scope = CoroutineScope(Dispatchers.Default)
     val loader: TrackLoader = TrackLoader(this).also { scope.launch { it.work() } }
     var que: Que<Track> = Que()
@@ -31,15 +31,14 @@ class Player(val node: Node, val id: Long) {
     }
 
     var current: Track? = null
-    var last_position = 0
-    var last_update = 0
+    var last_position = 0L
+    var last_update = 0L
 
     fun teardown() {
         println("tearing down player")
-        scope.cancel()
         node.players.remove(id)
+        scope.cancel()
         loader.teardown()
-        println(node.players)
     }
 
     suspend fun fetch_track(data: Play) {
@@ -75,7 +74,8 @@ class Player(val node: Node, val id: Long) {
     }
 
     fun update_player_state(data: PlayerUpdate) {
-
+        last_position = data.state.position
+        last_update = data.state.time
     }
 
     suspend fun send_voice() {
@@ -141,5 +141,15 @@ class Player(val node: Node, val id: Long) {
         loader.clear()
         que.clear()
         stop()
+    }
+
+    fun move(identifier: String? = null) {
+        // TODO: 23/01/2022 not sure if it works 
+        node.players.remove(id)
+        if (identifier != null) {
+            node.client.nodes[identifier]?.also { node = it }?.also { it.players[id] = this@Player }
+        } else {
+            node.client.best_node_players?.also { node = it }?.also { it.players[id] = this@Player }
+        }
     }
 }

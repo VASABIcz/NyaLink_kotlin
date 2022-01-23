@@ -3,11 +3,10 @@ package trackloader
 import Player
 import commands.Play
 import commands.PlayCallback
-import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import javax.naming.Context
 
 /*
 https://github.com/rrva/coredis
@@ -160,7 +159,6 @@ class TrackLoader(val player: Player) {
     }
 
     fun clear() {
-        channel.close()
         worker.cancel()
         channel = Channel()
         worker = player.scope.launch { work() }

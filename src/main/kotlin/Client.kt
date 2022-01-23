@@ -6,7 +6,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import trackloader.Cache
 
@@ -42,7 +41,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
             "voice_server_update" -> parse<VoiceServerUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_server(it) }
             // nodes
             "add_node" -> parse<AddNode>(data)?.also { add_node(it) }
-            "remove_node" -> parse<RemoveNode>(data)?.also { remove_node(it) }
+            "remove_node" -> parse<RemoveNode>(data)?.also { nodes[it.identifier]?.teardown(it) }
             // player
             "destroy" -> parse<DestroyPlayer>(data)?.also { players()[it.guild]?.teardown() }
             "clear" -> parse<Clear>(data)?.also { players()[it.guild]?.clear() }
@@ -72,19 +71,14 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
         println("sending to client $text")
         ws.send(text.toString())
     }
-    
+
     suspend fun resume(ws: DefaultWebSocketSession) {
         this.ws = ws
         listen()
     }
 
-    inline fun <reified T> parse(data: String): T? {
-        return try {
-            parser.decodeFromString<T>(data)
-        } catch (t: Throwable) {
-            println("failed to parse $t")
-            null
-        }
+    suspend inline fun <reified T> parse(data: String): T? {
+        return cache.parse<T>(data)
     }
 
     suspend fun add_node(data: AddNode) {
@@ -93,14 +87,6 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
         if (x == null) {
             node.connect()
         }
-    }
-
-    suspend fun remove_node(data: RemoveNode) {
-        println("removing node ${data.identifier}")
-
-        val node = nodes[data.identifier]
-        nodes.remove(data.identifier)
-        node?.teardown()
     }
 
     fun players(): HashMap<Long, Player> {
