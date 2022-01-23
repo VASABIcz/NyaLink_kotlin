@@ -119,8 +119,6 @@ class TrackLoader(val player: Player) {
         while (!closed) {
             try {
                 val t = channel.receive().also { println("working on ${it.name}") }
-                var res: FetchResult?
-                var source: String = "unknown"
 
                 val c = maybe_cache(t.name)
 
