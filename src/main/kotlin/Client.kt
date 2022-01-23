@@ -9,7 +9,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import trackloader.Cache
 
-
 class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, val cache: Cache) {
     var nodes = HashMap<String, Node>()
     val scope =  CoroutineScope(Dispatchers.Default)
