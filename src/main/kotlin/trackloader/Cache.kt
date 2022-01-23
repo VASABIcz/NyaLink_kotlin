@@ -1,6 +1,7 @@
 package trackloader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -10,8 +11,20 @@ import redis.clients.jedis.JedisPooled
 class Cache(private val cache: JedisPooled, val parser: Json) {
 
     suspend fun get(key: String): String? = withContext(Dispatchers.IO) {
-        val res = cache.get(key)
-        return@withContext res
+        trytimes {
+            cache.get(key)
+        }
+    }
+
+    suspend fun <T> trytimes(times: Int = 5, d: Long = 100, x: () -> T?): T? {
+        repeat(times) {
+            try {
+                return x()
+            } catch (t: Throwable) {
+                delay(d)
+            }
+        }
+        return null
     }
 
     suspend fun get_parsed(keu: String): TrackResult? {
@@ -22,11 +35,15 @@ class Cache(private val cache: JedisPooled, val parser: Json) {
     }
 
     suspend fun set(key: String, value: String) = withContext(Dispatchers.IO) {
-        cache.set(key, value)
+        trytimes {
+            cache.set(key, value)
+        }
     }
 
-    fun remove(key: String) {
-        cache.del(key)
+    suspend fun remove(key: String) {
+        trytimes {
+            cache.del(key)
+        }
     }
 
     suspend inline fun <reified T> parse(data: String): T? = coroutineScope {
