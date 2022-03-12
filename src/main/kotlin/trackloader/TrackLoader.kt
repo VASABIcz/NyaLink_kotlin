@@ -56,12 +56,12 @@ class TrackLoader(val player: Player) {
         val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch(t.name)
 
         if (res != null) {
-            if (res.loadType == "NO_MATCHES") {
+            return if (res.tracks.isEmpty()) {
                 println("no matches for ${t.name}")
-                return null
+                null
             } else {
                 println("parsing to cache format ${t.name}")
-                return CacheData(res.tracks, System.currentTimeMillis())//.also { cache(t.name, it) }
+                CacheData(res.tracks, System.currentTimeMillis())//.also { cache(t.name, it) }
             }
         }
         return null
