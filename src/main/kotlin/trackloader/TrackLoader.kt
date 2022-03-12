@@ -77,7 +77,7 @@ class TrackLoader(val player: Player) {
                 fetch_url(data).also { println("fetch_url res $it") }
                     ?.also { player.scope.launch { cache(data.name, it) } }
             } else {
-                fetch_search(data).also { println("fetch_url res $it") }
+                fetch_search(data).also { println("fetch_search res $it") }
                     ?.also { player.scope.launch { cache(data.name, it) } }
             }
         } else {
