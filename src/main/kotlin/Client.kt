@@ -50,7 +50,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
             "loop" -> parse<Loop>(data)?.also { players()[it.guild]?.que?.loop = it.type }
             "now_playing" -> parse<NowPlaying>(data)?.also { players()[it.guild]?.send_callback(it) }
             "revind" -> parse<Revind>(data)?.also {}
-            "skip_to" -> parse<SkiTo>(data)?.also {}
+            "skip_to" -> parse<SkipTo>(data)?.also {}
             "remove" -> parse<Remove>(data)?.also { players()[it.guild]?.que?.remove(it.index) }
             else -> println("unahndled op: ${d?.op} $data")
         }
