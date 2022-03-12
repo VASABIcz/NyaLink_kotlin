@@ -41,7 +41,7 @@ class TrackLoader(val player: Player) {
             ?.limit_fetch("ytsearch:${t.name}")
 
         if (res != null) {
-            return if (res.loadType == "NO_MATCHES") {
+            return if (res.tracks.isEmpty()) {
                 println("no matches for ${t.name}")
                 null
             } else {
