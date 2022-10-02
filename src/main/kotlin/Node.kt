@@ -43,20 +43,19 @@ class Node(val args: AddNode, val client: Client) {
         val type = if (args.secure) "https" else "http"
 
         repeat(3) {
-            val response: HttpStatement = client.ktor_client.request("${type}://${args.host}:${args.port}/loadtracks") {
+            val res: HttpResponse = client.ktor_client.request("${type}://${args.host}:${args.port}/loadtracks") {
                 method = HttpMethod.Get
                 parameter("identifier", track)
                 header("Authorization", args.password)
                 header("User-Id", client.id.toString())
                 header("Client-Name", "NyaLink_kotlin")
             }
-            val res = response.execute()
 
             if (res.status.value != 200) {
                 println("track load returned $track ${res.status.value}")
                 return@repeat
             }
-            val data = res.readText()
+            val data = res.bodyAsText()
             println("parsing track data $data")
             val parsed = client.parse<FetchResult>(data)
             println("parsed track respnse $parsed")
@@ -73,7 +72,7 @@ class Node(val args: AddNode, val client: Client) {
 
     fun create_player(id: Long): Player {
         val player = Player(this, id)
-        players.put(id, player)
+        players[id] = player
         return player
     }
 }

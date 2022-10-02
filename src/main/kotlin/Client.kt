@@ -1,7 +1,8 @@
 import commands.*
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
-import io.ktor.http.cio.websocket.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -13,7 +14,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     var nodes = HashMap<String, Node>()
     val scope =  CoroutineScope(Dispatchers.Default)
     val ktor_client = HttpClient(CIO) {
-        install(io.ktor.client.features.websocket.WebSockets)
+        install(WebSockets)
     }
 
     val available_nodes: MutableCollection<Node>
