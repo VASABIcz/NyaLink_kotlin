@@ -122,14 +122,12 @@ class SyncedQue<T> {
 
     // FIXME: 23/01/2022 erroring here
     suspend fun get(): T {
-        lock.withLock {
-            if (queue.size == 0) {
-                await_job()
-                println(queue)
-            }
-
-            return queue[0]
+        if (queue.size == 0) {
+            await_job()
+            println(queue)
         }
+
+        return queue[0]
     }
 
     override fun toString(): String {

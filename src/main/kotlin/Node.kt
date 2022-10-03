@@ -43,7 +43,7 @@ class Node(val args: AddNode, val client: Client) {
         val type = if (args.secure) "https" else "http"
 
         repeat(3) {
-            val res: HttpResponse = client.ktor_client.request("${type}://${args.host}:${args.port}/loadtracks") {
+            val res: HttpResponse = client.ktorClient.request("${type}://${args.host}:${args.port}/loadtracks") {
                 method = HttpMethod.Get
                 parameter("identifier", track)
                 header("Authorization", args.password)

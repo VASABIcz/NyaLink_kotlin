@@ -151,7 +151,7 @@ class Player(var node: Node, val id: Long) {
         if (identifier != null) {
             node.client.nodes[identifier]?.also { node = it }?.also { it.players[id] = this@Player }
         } else {
-            node.client.best_node_players?.also { node = it }?.also { it.players[id] = this@Player }
+            node.client.bestNodePlayers?.also { node = it }?.also { it.players[id] = this@Player }
         }
     }
 

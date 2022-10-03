@@ -38,7 +38,7 @@ class TrackLoader(val player: Player) {
     }
 
     suspend fun fetch_search(t: Play): CacheData? {
-        val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }
+        val res = player.node.client.bestNodeFetch.also { println("sending work to node $it") }
             ?.limit_fetch("ytsearch:${t.name}")
 
         if (res != null) {
@@ -54,7 +54,7 @@ class TrackLoader(val player: Player) {
     }
 
     suspend fun fetch_url(t: Play): CacheData? {
-        val res = player.node.client.best_node_fetch.also { println("sending work to node $it") }?.limit_fetch(t.name)
+        val res = player.node.client.bestNodeFetch.also { println("sending work to node $it") }?.limit_fetch(t.name)
 
         if (res != null) {
             return if (res.tracks.isEmpty()) {

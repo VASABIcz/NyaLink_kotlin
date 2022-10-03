@@ -12,19 +12,19 @@ import trackloader.Cache
 
 class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, val cache: Cache) {
     var nodes = HashMap<String, Node>()
-    val scope =  CoroutineScope(Dispatchers.Default)
-    val ktor_client = HttpClient(CIO) {
+    private val scope = CoroutineScope(Dispatchers.Default)
+    val ktorClient = HttpClient(CIO) {
         install(WebSockets)
     }
 
-    val available_nodes: MutableCollection<Node>
+    val availableNodes: MutableCollection<Node>
         get() = nodes.values.filter { it.available }.toMutableList()
 
-    val best_node_players: Node?
-        get() = available_nodes.minByOrNull { node -> node.players.size }
+    val bestNodePlayers: Node?
+        get() = availableNodes.minByOrNull { node -> node.players.size }
 
-    val best_node_fetch: Node?
-        get() = available_nodes.maxByOrNull { node -> node.semaphore.availablePermits }
+    val bestNodeFetch: Node?
+        get() = availableNodes.maxByOrNull { node -> node.semaphore.availablePermits }
 
     val connected: Boolean
         get() = ws.isActive
@@ -35,17 +35,26 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
         println("recived op: ${d?.op}")
         when (d?.op) {
             // voice
-            "voice_state_update" -> parse<VoiceStateUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_state(it) }
-            "voice_server_update" -> parse<VoiceServerUpdate>(data)?.also { get_player(it.guild_id.toLong())?.update_voice_server(it) }
+            "voice_state_update" -> parse<VoiceStateUpdate>(data)?.also {
+                getPlayer(it.guild_id.toLong())?.update_voice_state(
+                    it
+                )
+            }
+
+            "voice_server_update" -> parse<VoiceServerUpdate>(data)?.also {
+                getPlayer(it.guild_id.toLong())?.update_voice_server(
+                    it
+                )
+            }
             // nodes
-            "add_node" -> parse<AddNode>(data)?.also { add_node(it) }
+            "add_node" -> parse<AddNode>(data)?.also { addNode(it) }
             "remove_node" -> parse<RemoveNode>(data)?.also { nodes[it.identifier]?.teardown(it) }
             // player
             "destroy" -> parse<DestroyPlayer>(data)?.also { players()[it.guild]?.teardown() }
             "clear" -> parse<Clear>(data)?.also { players()[it.guild]?.clear() }
-            "skip" -> parse<Skip>(data)?.also { get_player(it.guild)?.stop() }
+            "skip" -> parse<Skip>(data)?.also { getPlayer(it.guild)?.stop() }
             "shuffle" -> parse<Shuffle>(data)?.also { players()[it.guild]?.que?.shuffle() }
-            "play" -> parse<Play>(data)?.also { get_player(it.guild)?.fetch_track(it) }
+            "play" -> parse<Play>(data)?.also { getPlayer(it.guild)?.fetch_track(it) }
             "pause" -> parse<Pause>(data)?.also { players()[it.guild]?.send_pause(it) }
             "seek" -> parse<Seek>(data)?.also { players()[it.guild]?.send_seek(it) }
             "loop" -> parse<Loop>(data)?.also { players()[it.guild]?.que?.setLoop(it.type) }
@@ -80,7 +89,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
         return cache.parse<T>(data)
     }
 
-    suspend fun add_node(data: AddNode) {
+    suspend fun addNode(data: AddNode) {
         val node = Node(data, this)
         val x = nodes.putIfAbsent(data.identifier, node)
         if (x == null) {
@@ -91,7 +100,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
     fun players(): HashMap<Long, Player> {
         val players = HashMap<Long, Player>()
 
-        available_nodes.forEach {
+        availableNodes.forEach {
             it.players.values.forEach {
                 players.put(it.id, it)
             }
@@ -100,11 +109,11 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
         return players
     }
 
-    suspend fun create_player(id: Long): Player? {
-        return best_node_players?.create_player(id)
+    suspend fun createPlayer(id: Long): Player? {
+        return bestNodePlayers?.create_player(id)
     }
 
-    suspend fun get_player(id: Long): Player? {
-        return players()[id] ?: create_player(id)
+    suspend fun getPlayer(id: Long): Player? {
+        return players()[id] ?: createPlayer(id)
     }
 }

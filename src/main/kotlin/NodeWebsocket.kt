@@ -17,6 +17,7 @@ class NodeWebsocket(val node: Node) {
 
     suspend fun handle(frame: Frame.Text) {
         val data = frame.readText()
+        println("node ws $data")
         val d = node.client.parse<Event>(data)
         d?.op?.also { if (it != "playerUpdate") println("recived lavalink $it") }
         when (d?.op) {
