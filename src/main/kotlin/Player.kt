@@ -8,7 +8,8 @@ import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
 import trackloader.TrackCallback
 import trackloader.TrackLoader
-import utils.Que
+import utils.SyncedQue
+import java.util.concurrent.atomic.AtomicBoolean
 import to_lavlaink_commands.Pause as Pausel
 import to_lavlaink_commands.Play as Playl
 import to_lavlaink_commands.Seek as Seekl
@@ -17,19 +18,20 @@ import to_lavlaink_commands.Seek as Seekl
 class Player(var node: Node, val id: Long) {
     val scope = CoroutineScope(Dispatchers.Default)
     val loader: TrackLoader = TrackLoader(this).also { scope.launch { it.work() } }
-    var que: Que<Track> = Que()
+    var que: SyncedQue<Track> = SyncedQue()
 
     var session: VoiceStateUpdate? = null
     var event: VoiceServerUpdate? = null
 
-    var waiting = false
+    var waiting: AtomicBoolean = AtomicBoolean(false)
 
-    fun playing(): Boolean {
-        if (session?.channel_id != null && current != null) {
-            return true
+    val isPlaying: Boolean
+        get() {
+            if (session?.channel_id != null && current != null) {
+                return true
+            }
+            return false
         }
-        return false
-    }
 
     var current: Track? = null
     var last_position = 0L
@@ -44,7 +46,7 @@ class Player(var node: Node, val id: Long) {
 
     suspend fun fetch_track(data: Play) {
         loader.send(data)
-        println("player state playing: ${playing()} waiting: $waiting current $current")
+        println("player state playing: $isPlaying waiting: $waiting current $current")
         println("sending to worker queue ${data.name}")
     }
 
@@ -87,10 +89,10 @@ class Player(var node: Node, val id: Long) {
     }
 
     suspend fun do_next() {
-        if (waiting || playing()) {
+        if (waiting.acquire || isPlaying) {
             return
         }
-        waiting = true
+        waiting.set(true)
         println("doing next")
         try {
             withTimeout(1000 * 30 * 1) {
@@ -102,7 +104,7 @@ class Player(var node: Node, val id: Long) {
             teardown()
             return
         }
-        waiting = false
+        waiting.set(false)
     }
 
     suspend fun stop() {

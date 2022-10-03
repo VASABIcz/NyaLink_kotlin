@@ -48,7 +48,7 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val parser: Json, va
             "play" -> parse<Play>(data)?.also { get_player(it.guild)?.fetch_track(it) }
             "pause" -> parse<Pause>(data)?.also { players()[it.guild]?.send_pause(it) }
             "seek" -> parse<Seek>(data)?.also { players()[it.guild]?.send_seek(it) }
-            "loop" -> parse<Loop>(data)?.also { players()[it.guild]?.que?.loop = it.type }
+            "loop" -> parse<Loop>(data)?.also { players()[it.guild]?.que?.setLoop(it.type) }
             "now_playing" -> parse<NowPlaying>(data)?.also { players()[it.guild]?.send_callback(it) }
             "revind" -> parse<Revind>(data)?.also {}
             "skip_to" -> parse<SkipTo>(data)?.also {}
