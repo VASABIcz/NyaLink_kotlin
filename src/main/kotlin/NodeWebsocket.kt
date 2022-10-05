@@ -31,7 +31,7 @@ class NodeWebsocket(private val node: Node) {
             "playerUpdate" -> node.client.parse<PlayerUpdate>(data)
                 ?.also { node.players[it.guildId]?.updatePlayerState(it) }
 
-            else -> logger.debug("unhandled lavalink command $data")
+            else -> logger.warn("unhandled lavalink command $data")
         }
     }
 
@@ -96,7 +96,7 @@ class NodeWebsocket(private val node: Node) {
                 ?.also { node.players[it.guildId]?.onTrackStop() }
 
             "TrackStartEvent" -> node.client.parse<TrackStartEvent>(data)?.also {
-                // todo
+                node.players[it.guildId]?.onTrackStart()
             }
 
             "TrackEndEvent" -> node.client.parse<TrackEndEvent>(data)?.also { node.players[it.guildId]?.onTrackStop() }
