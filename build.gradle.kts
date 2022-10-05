@@ -41,4 +41,6 @@ dependencies  {
     implementation("org.jetbrains.kotlin:kotlin-serialization:1.6.10")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.4.0")
     implementation("redis.clients:jedis:4.2.3")
+    // logging
+    implementation("io.github.microutils:kotlin-logging-jvm:3.0.0")
 }

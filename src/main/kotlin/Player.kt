@@ -3,6 +3,7 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import lavalink_commands.PlayerUpdate
+import mu.KotlinLogging
 import to_lavlaink_commands.Stop
 import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
@@ -17,7 +18,8 @@ import to_lavlaink_commands.Seek as Seekl
 // TODO: 22/01/2022 small todo FIX THIS FUCKING MESS + TRACK-LOADER MESS :D
 class Player(var node: Node, val id: Long) {
     val scope = CoroutineScope(Dispatchers.Default)
-    val loader: TrackLoader = TrackLoader(this).also { scope.launch { it.work() } }
+    private val loader: TrackLoader = TrackLoader(this)
+    private val logger = KotlinLogging.logger { }
     var que: SyncedQue<Track> = SyncedQue()
 
     var session: VoiceStateUpdate? = null
@@ -34,53 +36,53 @@ class Player(var node: Node, val id: Long) {
         }
 
     var current: Track? = null
-    var last_position = 0L
-    var last_update = 0L
+    var lastPosition = 0L
+    var lastUpdate = 0L
 
     fun teardown() {
-        println("tearing down player")
+        logger.debug("tearing down player")
         node.players.remove(id)
         scope.cancel()
         loader.teardown()
     }
 
-    suspend fun fetch_track(data: Play) {
+    suspend fun fetchTrack(data: Play) {
         loader.send(data)
-        println("player state playing: $isPlaying waiting: $waiting current $current")
-        println("sending to worker queue ${data.name}")
+        logger.debug("player state playing: $isPlaying waiting: $waiting current $current")
+        logger.debug("sending to worker queue ${data.name}")
     }
 
-    suspend fun update_voice_state(state: VoiceStateUpdate) {
+    suspend fun updateVoiceState(state: VoiceStateUpdate) {
         if (session == null) {
             session = state
-            send_voice()
+            sendVoice()
             return
         }
 
         if (state.channel_id == null) {
             teardown()
             session = state
-            send_voice()
+            sendVoice()
         } else if (state.channel_id != session?.channel_id) {
             session = state
-            send_voice()
+            sendVoice()
         } else if (state.session_id != session?.session_id) {
             session = state
-            send_voice()
+            sendVoice()
         }
     }
 
-    suspend fun update_voice_server(state: VoiceServerUpdate) {
+    suspend fun updateVoiceServer(state: VoiceServerUpdate) {
         event = state
-        send_voice()
+        sendVoice()
     }
 
-    fun update_player_state(data: PlayerUpdate) {
-        last_position = data.state.position
-        last_update = data.state.time
+    fun updatePlayerState(data: PlayerUpdate) {
+        lastPosition = data.state.position
+        lastUpdate = data.state.time
     }
 
-    suspend fun send_voice() {
+    suspend fun sendVoice() {
         val e = event ?: return
         val s = session ?: return
 
@@ -88,17 +90,17 @@ class Player(var node: Node, val id: Long) {
         node.send(Json.encodeToString(d))
     }
 
-    suspend fun do_next() {
+    suspend fun doNext() {
         if (waiting.acquire || isPlaying) {
             return
         }
         waiting.set(true)
-        println("doing next")
+        logger.debug("doing next")
         try {
             withTimeout(1000 * 30 * 1) {
                 val res = que.get()
-                println("got $res from queue")
-                send_play(res)
+                logger.debug("got $res from queue")
+                sendPlay(res)
             }
         } catch (t: TimeoutCancellationException) {
             teardown()
@@ -111,30 +113,30 @@ class Player(var node: Node, val id: Long) {
         node.send(Json.encodeToString(Stop(guildId = id.toString(), op = "stop")))
     }
 
-    suspend fun on_track_stop() {
+    suspend fun onTrackStop() {
         current = null
         que.consume()
-        do_next()
+        doNext()
     }
 
-    suspend fun send_play(track: Track) {
-        println("play invoked $id ${track.info.title}")
+    suspend fun sendPlay(track: Track) {
+        logger.debug("play invoked $id ${track.info.title}")
         current = track
-        last_position = 0
-        last_update = 0
+        lastPosition = 0
+        lastUpdate = 0
 
         val payload = Json.encodeToString(Playl(id.toString(), track.track, op = "play", noReplace = false))
         node.send(payload)
     }
 
-    suspend fun send_pause(data: Pause) {
-        println("sending pause ${data.pause} $id")
+    suspend fun sendPause(data: Pause) {
+        logger.debug("sending pause ${data.pause} $id")
         val payload = Json.encodeToString(Pausel(op = "pause", guildId = id.toString(), data.pause))
         node.send(payload)
     }
 
-    suspend fun send_seek(data: Seek) {
-        println("sending seek ${data.time / 1000 / 60}m $id")
+    suspend fun sendSeek(data: Seek) {
+        logger.debug("sending seek ${data.time / 1000 / 60}m $id")
         val payload = Json.encodeToString(Seekl(op = "seek", guildId = id.toString(), data.time))
         node.send(payload)
     }
@@ -155,7 +157,7 @@ class Player(var node: Node, val id: Long) {
         }
     }
 
-    suspend fun send_callback(data: NowPlaying) {
+    suspend fun sendCallback(data: NowPlaying) {
         node.client.send(
             Json.encodeToString(
                 TrackCallback(

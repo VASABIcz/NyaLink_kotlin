@@ -123,7 +123,7 @@ class SyncedQue<T> {
     // FIXME: 23/01/2022 erroring here
     suspend fun get(): T {
         if (queue.size == 0) {
-            await_job()
+            awaitJob()
             println(queue)
         }
 
@@ -140,7 +140,7 @@ class SyncedQue<T> {
         }
     }
 
-    private suspend fun await_job() {
+    private suspend fun awaitJob() {
         if (!job.isActive) {
             job = Job()
         }
@@ -148,15 +148,15 @@ class SyncedQue<T> {
         job = Job()
     }
 
-    private suspend fun raw_consume() {
-        queue_pop()
+    private fun rawConsume() {
+        queuePop()
     }
 
-    private suspend fun move_on() {
-        queue_pop().also { queue.add(it) }
+    private fun moveOn() {
+        queuePop().also { queue.add(it) }
     }
 
-    private suspend fun queue_pop(index: Int = 0): T {
+    private fun queuePop(index: Int = 0): T {
         val x = queue[index]
         queue.removeAt(index)
         return x
@@ -175,22 +175,22 @@ class SyncedQue<T> {
             println("consuming $loop $queue")
             if (queue.size > 0) {
                 when (loop) {
-                    LoopType.None -> raw_consume()
-                    LoopType.All -> move_on()
+                    LoopType.None -> rawConsume()
+                    LoopType.All -> moveOn()
                     LoopType.One -> {}
                 }
             }
         }
     }
 
-    private suspend fun raw_push(item: T) {
+    private fun rawPush(item: T) {
         queue.add(item)
     }
 
     suspend fun push(item: T) {
         lock.withLock {
             println("que ${this.queue} $job $")
-            raw_push(item)
+            rawPush(item)
             println("pushed $item")
             job.complete()
         }
@@ -208,16 +208,16 @@ class SyncedQue<T> {
         }
     }
 
-    suspend fun skip_to(index: Int) {
+    suspend fun skipTo(index: Int) {
         lock.withLock {
             repeat(index) {
-                val x = queue_pop()
+                val x = queuePop()
                 queue.add(x)
             }
         }
     }
 
-    suspend fun add(data: Collection<T>) {
+    suspend fun pushAll(data: Collection<T>) {
         lock.withLock {
             queue.addAll(data)
             job.complete()

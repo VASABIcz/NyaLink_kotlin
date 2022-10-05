@@ -6,30 +6,36 @@ import io.ktor.http.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import lavalink_commands.*
+import mu.KotlinLogging
 
 
-class NodeWebsocket(val node: Node) {
-    val connected: Boolean
-        get() = ws?.isActive?: false
-    var closed = false
+class NodeWebsocket(private val node: Node) {
+    private val logger = KotlinLogging.logger { }
+    val isConnected: Boolean
+        get() = ws?.isActive ?: false
+    var isClosed = false
 
     var ws: DefaultWebSocketSession? = null
 
-    suspend fun handle(frame: Frame.Text) {
+    private suspend fun handle(frame: Frame.Text) {
         val data = frame.readText()
-        println("node ws $data")
-        val d = node.client.parse<Event>(data)
-        d?.op?.also { if (it != "playerUpdate") println("recived lavalink $it") }
-        when (d?.op) {
-            "stats" -> node.client.parse<Stats>(data)?.also { println(it) }.also { node.stats = it }
-            "event" -> process_event(d, data)
-            "playerUpdate" -> node.client.parse<PlayerUpdate>(data)?.also { node.players[it.guildId]?.update_player_state(it) }
 
-            else -> println("unhandled lavalink command $data")
+        logger.debug("node ws ${node.args.identifier} $data")
+        val d = node.client.parse<Event>(data)
+        d?.op?.also { if (it != "playerUpdate") logger.debug("received lavalink $it") }
+        when (d?.op) {
+            "stats" -> node.client.parse<Stats>(data)?.also { logger.debug(it.toString()) }
+                .also { node.statistics = it }
+
+            "event" -> processEvent(d, data)
+            "playerUpdate" -> node.client.parse<PlayerUpdate>(data)
+                ?.also { node.players[it.guildId]?.updatePlayerState(it) }
+
+            else -> logger.debug("unhandled lavalink command $data")
         }
     }
 
-    suspend fun listener() {
+    private suspend fun listener() {
         for (x in ws?.incoming!!) {
             when (x) {
                 is Frame.Text -> handle(x)
@@ -38,10 +44,13 @@ class NodeWebsocket(val node: Node) {
     }
 
     suspend fun connect() {
+        // todo better reconnect logic
         node.scope.launch {
-            var repeats = 0
-            while (!connected and !closed) {
-                println("connecting to ${node.args.identifier} ${node.args}")
+            if (!node.scope.isActive) {
+                return@launch
+            }
+            logger.debug("connecting to ${node.args.identifier} ${node.args}")
+            while (!isConnected and !isClosed) {
                 val client = HttpClient(CIO) {
                     install(WebSockets)
                 }
@@ -53,41 +62,44 @@ class NodeWebsocket(val node: Node) {
                     }) {
                         ws = this@webSocket
                         withContext(Dispatchers.Default) { listener() }
-                        println("closing lavalink ws ${node.args.identifier}")
+                        logger.debug("closing lavalink ws ${node.args.identifier}")
                         return@webSocket
                     }
                 }
                 catch (e: Throwable) {
-                    println("ws exception ${node.args.identifier} $e")
-                    if (repeats > 5) {
-                        println("failed to connect/reconnect ${node.args.identifier}")
-                        return@launch
-                    }
+                    logger.debug("ws exception ${node.args.identifier} $e")
                     delay(1000)
-                    repeats += 1
                 }
             }
         }
     }
 
     suspend fun teardown() {
-        closed = true
+        isClosed = true
         ws?.close()
-        println("teardown ws ${node.args.identifier}")
+        logger.debug("teardown ws ${node.args.identifier}")
     }
 
     suspend fun send(text: Any) {
-        println("sending lavalink $text")
+        logger.debug("sending lavalink $text")
         ws?.send(text.toString())
     }
 
-    suspend fun process_event(event: Event, data: String) {
-        println(event)
+    private suspend fun processEvent(event: Event, data: String) {
+        logger.debug(event.toString())
         when (event.type) {
-            "WebSocketClosedEvent" -> node.client.parse<WebSocketClosedEvent>(data).also { }
-            "TrackStuckEvent" -> node.client.parse<TrackStuckEvent>(data)?.also { node.players[it.guildId]?.on_track_stop() }
-            "TrackStartEvent" -> node.client.parse<TrackStartEvent>(data)?.also { }
-            "TrackEndEvent" -> node.client.parse<TrackEndEvent>(data)?.also { node.players[it.guildId]?.on_track_stop() }
+            "WebSocketClosedEvent" -> node.client.parse<WebSocketClosedEvent>(data).also {
+                // todo
+            }
+
+            "TrackStuckEvent" -> node.client.parse<TrackStuckEvent>(data)
+                ?.also { node.players[it.guildId]?.onTrackStop() }
+
+            "TrackStartEvent" -> node.client.parse<TrackStartEvent>(data)?.also {
+                // todo
+            }
+
+            "TrackEndEvent" -> node.client.parse<TrackEndEvent>(data)?.also { node.players[it.guildId]?.onTrackStop() }
         }
     }
  }

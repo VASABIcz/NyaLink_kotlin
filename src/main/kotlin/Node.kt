@@ -6,41 +6,75 @@ import io.ktor.http.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.serialization.Serializable
 import lavalink_commands.Stats
+import mu.KotlinLogging
 import trackloader.FetchResult
 
+
+@Serializable
+data class NodeStatus(
+    val identifier: String,
+    val password: String,
+    val secure: Boolean = false,
+    val region: String = "europe",
+    val host: String,
+    val port: Int,
+    val players: Int,
+    val connected: Boolean
+)
+
 class Node(val args: AddNode, val client: Client) {
+    private val logger = KotlinLogging.logger { }
+    private var ws: NodeWebsocket? = null
     val scope = CoroutineScope(Dispatchers.Default)
     var players = HashMap<Long, Player>()
-    lateinit var ws: NodeWebsocket
-    val available: Boolean
-        get() = ws.connected
-    var stats: Stats? = null
+    var statistics: Stats? = null
     val semaphore = Semaphore(4)
 
-    suspend fun connect() {
-        ws = NodeWebsocket(this)
-        ws.connect()
+    init {
+        scope.launch {
+            ws = NodeWebsocket(this@Node)
+            ws?.connect()
+        }
     }
+
+    val isAvailable: Boolean
+        get() = ws?.isConnected ?: false
 
     suspend fun teardown(data: RemoveNode) {
         client.nodes.remove(data.identifier)
-        ws.teardown()
+        ws?.teardown()
         players.values.forEach {
             it.teardown()
         }
         scope.cancel()
-        println("teardown node ${args.identifier}")
+        logger.debug("teardown node ${args.identifier}")
     }
 
     suspend fun send(data: String) {
-        ws.send(data)
+        ws?.send(data)
     }
 
-    suspend fun fetch_track(track: String): FetchResult? {
+    fun getNodStatus(): NodeStatus {
+        return NodeStatus(
+            args.identifier,
+            args.password,
+            args.secure,
+            args.region,
+            args.host,
+            args.port,
+            players.size,
+            isAvailable
+        )
+    }
+
+    private suspend fun fetchTrack(track: String): FetchResult? {
         val type = if (args.secure) "https" else "http"
+        logger.debug("fetching track $track at node ${args.identifier}")
 
         repeat(3) {
             val res: HttpResponse = client.ktorClient.request("${type}://${args.host}:${args.port}/loadtracks") {
@@ -52,25 +86,24 @@ class Node(val args: AddNode, val client: Client) {
             }
 
             if (res.status.value != 200) {
-                println("track load returned $track ${res.status.value}")
+                logger.debug("track load returned $track ${res.status.value}")
                 return@repeat
             }
             val data = res.bodyAsText()
-            println("parsing track data $data")
             val parsed = client.parse<FetchResult>(data)
-            println("parsed track respnse $parsed")
+            logger.debug("parsed track response $parsed")
             return parsed
         }
         return null
     }
 
-    suspend fun limit_fetch(track: String): FetchResult? {
+    suspend fun limitFetch(track: String): FetchResult? {
         semaphore.withPermit {
-            return fetch_track(track)
+            return fetchTrack(track)
         }
     }
 
-    fun create_player(id: Long): Player {
+    fun createPlayer(id: Long): Player {
         val player = Player(this, id)
         players[id] = player
         return player

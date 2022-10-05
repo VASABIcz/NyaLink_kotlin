@@ -6,103 +6,110 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import mu.KotlinLogging
 
 // TODO: 23/01/2022 implemnt spotify 
-class TrackLoader(val player: Player) {
-    var channel = Channel<Play>()
-    var closed = false
-    val cache_client = player.node.client.cache
-    val regex = Regex("https?://(www\\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)")
+class TrackLoader(private val player: Player) {
+    companion object {
+        val regex =
+            Regex("https?://(www\\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)")
+    }
+
+    private val logger = KotlinLogging.logger { }
+    private val cacheClient = player.node.client.cache
     var worker = player.scope.launch { work() }
+
+    var channel = Channel<Play>()
+    var isClosed = false
 
 
     suspend fun send(track: Play) {
         channel.send(track)
     }
 
-    suspend fun maybe_cache(data: String): CacheData? {
-        println("checking cache for $data")
-        return cache_client.get(data)?.let { player.node.client.parse<CacheData>(it) }
+    suspend fun maybeCache(data: String): CacheData? {
+        logger.debug("checking cache for $data")
+        return cacheClient.get(data)?.let { player.node.client.parse<CacheData>(it) }
     }
 
     suspend fun cache(key: String, value: CacheData) {
         val s = Json.encodeToString(value)
-        println("caching $key")
-        cache_client.set(key, s)
+        logger.debug("caching $key ${value.tracks.size} tracks")
+        cacheClient.set(key, s)
     }
 
-    suspend fun send_callback(data: String) {
+    suspend fun sendCallback(data: String) {
         // TODO uuid
-        println("sending callback")
+        logger.debug("sending callback")
         player.node.client.send(data)
     }
 
-    suspend fun fetch_search(t: Play): CacheData? {
-        val res = player.node.client.bestNodeFetch.also { println("sending work to node $it") }
-            ?.limit_fetch("ytsearch:${t.name}")
+    suspend fun fetchSearch(t: Play): CacheData? {
+        val res = player.node.client.bestNodeFetch.also { logger.debug("sending work to node $it") }
+            ?.limitFetch("ytsearch:${t.name}")
 
         if (res != null) {
             return if (res.tracks.isEmpty()) {
-                println("no matches for ${t.name}")
+                logger.debug("no fetch search matches for ${t.name}")
                 null
             } else {
-                println("parsing to cache format ${t.name}")
-                CacheData(listOf(res.tracks[0]), System.currentTimeMillis())//.also { cache(t.name, it) }
+                logger.debug("successful search fetched ${t.name} ${res.tracks.size} tracks")
+                CacheData(listOf(res.tracks[0]), System.currentTimeMillis())
             }
         }
         return null
     }
 
-    suspend fun fetch_url(t: Play): CacheData? {
-        val res = player.node.client.bestNodeFetch.also { println("sending work to node $it") }?.limit_fetch(t.name)
+    suspend fun fetchUrl(t: Play): CacheData? {
+        val res = player.node.client.bestNodeFetch.also { logger.debug("sending work to node $it") }?.limitFetch(t.name)
 
         if (res != null) {
             return if (res.tracks.isEmpty()) {
-                println("no matches for ${t.name}")
+                logger.debug("no fetch url matches for ${t.name}")
                 null
             } else {
-                println("parsing to cache format ${t.name}")
-                CacheData(res.tracks, System.currentTimeMillis())//.also { cache(t.name, it) }
+                logger.debug("successful url fetched ${t.name} ${res.tracks.size} tracks")
+                CacheData(res.tracks, System.currentTimeMillis())
             }
         }
         return null
     }
 
     suspend fun process(data: Play): CacheData? {
-        val cache = maybe_cache(data.name)
+        val cache = maybeCache(data.name)
 
         return if (cache == null || !data.cache) {
-            println("fetched ${data.name}")
+            logger.debug("fetched ${data.name}")
 
             if (data.name.matches(regex)) {
-                fetch_url(data).also { println("fetch_url res $it") }
+                fetchUrl(data).also { logger.debug("fetch_url res $it") }
                     ?.also { player.scope.launch { cache(data.name, it) } }
             } else {
-                fetch_search(data).also { println("fetch_search res $it") }
+                fetchSearch(data).also { logger.debug("fetch_search res $it") }
                     ?.also { player.scope.launch { cache(data.name, it) } }
             }
         } else {
-            println("cached ${data.cache}")
+            logger.debug("used cache to retrieve ${data.name} ${cache.tracks.size} tracks")
             cache
         }
     }
 
     suspend fun work() {
-        while (!closed) {
+        while (!isClosed) {
             try {
-                val data = channel.receive().also { println("working on ${it.name}") }
+                val data = channel.receive().also { logger.debug("working on ${it.name}") }
 
                 val result = process(data)
-                println("after processing ${data.name} $result")
+                logger.debug("after processing ${data.name} $result")
                 result ?: return
 
-                player.scope.launch { player.do_next() }
-                player.que.add(result.tracks)
+                player.scope.launch { player.doNext() }
+                player.que.pushAll(result.tracks)
 
                 player.scope.launch {
                     val callback =
                         TrackCallback("track_result", result.tracks[0], data.requester, data.channel, data.guild)
-                    send_callback(Json.encodeToString(callback))
+                    sendCallback(Json.encodeToString(callback))
                 }
 
             } catch (_: Throwable) {
@@ -111,7 +118,7 @@ class TrackLoader(val player: Player) {
     }
 
     fun teardown() {
-        closed = true
+        isClosed = true
         channel.close()
     }
 
