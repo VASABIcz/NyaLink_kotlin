@@ -3,6 +3,7 @@ package trackloader
 import Player
 import commands.Play
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -36,6 +37,14 @@ class TrackLoader(private val player: Player) {
         val s = Json.encodeToString(value)
         logger.debug("caching $key ${value.tracks.size} tracks")
         cacheClient.set(key, s)
+
+        for (track in value.tracks) {
+            val k = track.info.title
+            val v = CacheData(listOf(track), value.timestamp)
+            logger.debug("caching $k $v track")
+            cacheClient.set(k, Json.encodeToString(v))
+            delay(5)
+        }
     }
 
     suspend fun sendCallback(data: String) {
