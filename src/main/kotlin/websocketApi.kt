@@ -17,9 +17,9 @@ fun Application.websocketApi(clients: HashMap<Long, Client>, cache: Cache) {
                 clients[id]?.resume(this@webSocket)
             } else if (id != null) {
                 logger.debug("connecting client $client")
-                val clinet = Client(id, this@webSocket, cache)
+                val clinet = Client(id, cache)
                 clients[id] = clinet
-                clients[id]?.listen()
+                clients[id]?.listen(this@webSocket)
             }
             logger.debug("client $client disconnected")
         }
