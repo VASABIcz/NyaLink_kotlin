@@ -4,6 +4,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import lavalink_commands.PlayerUpdate
 import mu.KotlinLogging
+import responses.TrackEnd
+import responses.TrackStart
 import to_lavlaink_commands.Stop
 import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
@@ -20,12 +22,14 @@ class Player(var node: Node, val id: Long) {
     val scope = CoroutineScope(Dispatchers.Default)
     private val loader: TrackLoader = TrackLoader(this)
     private val logger = KotlinLogging.logger { }
-    var que: SyncedQue<Track> = SyncedQue()
+    val que: SyncedQue<Track> = SyncedQue()
 
+    @get:Synchronized
+    @set:Synchronized
     var session: VoiceStateUpdate? = null
     var event: VoiceServerUpdate? = null
 
-    var waiting: AtomicBoolean = AtomicBoolean(false)
+    val waiting: AtomicBoolean = AtomicBoolean(false)
 
     val isPlaying: Boolean
         get() {
@@ -35,6 +39,8 @@ class Player(var node: Node, val id: Long) {
             return false
         }
 
+    @get:Synchronized
+    @set:Synchronized
     var current: Track? = null
     var lastPosition = 0L
     var lastUpdate = 0L
@@ -48,11 +54,12 @@ class Player(var node: Node, val id: Long) {
 
     suspend fun fetchTrack(data: Play) {
         loader.send(data)
-        logger.debug("player state playing: $isPlaying waiting: $waiting current $current")
+        logger.debug("player state playing: $isPlaying waiting: $waiting current session: $current ${session?.channel_id}")
         logger.debug("sending to worker queue ${data.name}")
     }
 
     suspend fun updateVoiceState(state: VoiceStateUpdate) {
+        logger.info("voice state update $state")
         if (session == null) {
             session = state
             sendVoice()
@@ -68,6 +75,8 @@ class Player(var node: Node, val id: Long) {
             sendVoice()
         } else if (state.session_id != session?.session_id) {
             session = state
+            sendVoice()
+        } else {
             sendVoice()
         }
     }
@@ -114,9 +123,27 @@ class Player(var node: Node, val id: Long) {
     }
 
     suspend fun onTrackStop() {
+        logger.info("removing track: $current")
+        current?.also {
+            sendTrackEnd(it)
+        }
         current = null
         que.consume()
         doNext()
+    }
+
+    suspend fun onTrackStart() {
+        current?.also {
+            sendTrackStart(it)
+        }
+    }
+
+    suspend fun sendTrackStart(t: Track) {
+        node.client.send(Json.encodeToString(TrackStart(t, id, "trackStart")))
+    }
+
+    suspend fun sendTrackEnd(t: Track) {
+        node.client.send(Json.encodeToString(TrackEnd(t, id, "trackEnd")))
     }
 
     suspend fun sendPlay(track: Track) {
