@@ -5,13 +5,13 @@ import io.ktor.client.plugins.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import trackloader.Cache
 
-class Client(var id: Long, var ws: DefaultWebSocketSession, val cache: Cache) {
+class Client(var id: Long, val cache: Cache) {
+    private var websockets = mutableListOf<DefaultWebSocketSession>()
     var nodes = HashMap<String, Node>()
     private val logger = KotlinLogging.logger { }
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -29,13 +29,15 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val cache: Cache) {
     val bestNodeFetch: Node?
         get() = availableNodes.maxByOrNull { node -> node.semaphore.availablePermits }
 
+    /*
     val connected: Boolean
         get() = ws.isActive
+     */
 
     private suspend fun handle(frame: Frame.Text) {
         val data = frame.readText().trim()
         val d = parse<Command>(data)
-        logger.debug("received op: ${d?.op}")
+        logger.debug("received op: ${d?.op} $data")
         when (d?.op) {
             // voice
             "voice_state_update" -> parse<VoiceStateUpdate>(data)?.also {
@@ -71,28 +73,36 @@ class Client(var id: Long, var ws: DefaultWebSocketSession, val cache: Cache) {
             }
 
             "remove" -> parse<Remove>(data)?.also { getPlayers()[it.guild]?.que?.remove(it.index) }
-            else -> logger.debug("unahndled op: ${d?.op} $data")
+            else -> logger.warn("unahndled op: ${d?.op} $data")
         }
         logger.debug("after parse ${d?.op}")
     }
 
-    suspend fun listen() {
-        for (x in ws.incoming) {
-            when (x) {
-                is Frame.Text -> scope.launch { handle(x) }
-                else -> {}
+    suspend fun listen(ws: DefaultWebSocketSession) {
+        websockets.add(ws)
+        try {
+            for (x in ws.incoming) {
+                when (x) {
+                    is Frame.Text -> scope.launch { handle(x) }
+                    else -> {}
+                }
             }
+        } catch (t: Throwable) {
+            t.printStackTrace()
         }
+        websockets.remove(ws)
+        logger.debug("I client with id $id, disconnecting $websockets")
     }
 
     suspend fun send(text: Any) {
         logger.debug("sending to client $text")
-        ws.send(text.toString())
+        for (ws in websockets) {
+            ws.send(text.toString())
+        }
     }
 
     suspend fun resume(ws: DefaultWebSocketSession) {
-        this.ws = ws
-        listen()
+        listen(ws)
     }
 
     suspend inline fun <reified T> parse(data: String): T? {
