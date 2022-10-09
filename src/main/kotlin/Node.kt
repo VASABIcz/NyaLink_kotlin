@@ -23,14 +23,14 @@ data class NodeStatus(
     val region: String = "europe",
     val host: String,
     val port: Int,
-    val players: Int,
-    val connected: Boolean
+    val connected: Boolean,
+    val players: Map<Long, PlayerStatus>
 )
 
 class Node(val args: AddNode, val client: Client) {
     private val logger = KotlinLogging.logger { }
     private var ws: NodeWebsocket? = null
-    val scope = CoroutineScope(Dispatchers.Default)
+    val scope = CoroutineScope(Dispatchers.IO)
     var players = HashMap<Long, Player>()
     var statistics: Stats? = null
     val semaphore = Semaphore(4)
@@ -67,8 +67,8 @@ class Node(val args: AddNode, val client: Client) {
             args.region,
             args.host,
             args.port,
-            players.size,
-            isAvailable
+            isAvailable,
+            players.mapValues { PlayerStatus(it.value.que.size, it.value.isPlaying) }
         )
     }
 

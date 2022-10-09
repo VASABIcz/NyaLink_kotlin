@@ -2,8 +2,10 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
 import mu.KotlinLogging
 import trackloader.Cache
+import trackloader.Track
 
 
 fun Application.restApi(clients: HashMap<Long, Client>, cache: Cache) {
@@ -46,8 +48,8 @@ fun Application.restApi(clients: HashMap<Long, Client>, cache: Cache) {
             val client = clients[c] ?: return@get call.respond(HttpStatusCode.NotFound)
             val player = client.getPlayers()[g] ?: return@get call.respond(HttpStatusCode.NotFound)
 
-            val x = player.que.items.drop(o).take(a)
-            call.respond(x)
+            val queue = Queue(player.que.items.drop(o).take(a), player.que.size)
+            call.respond(queue)
         }
         get("cache") {
             val q = call.request.queryParameters["q"] ?: return@get call.respond(HttpStatusCode.NotFound)
@@ -67,3 +69,6 @@ fun Application.restApi(clients: HashMap<Long, Client>, cache: Cache) {
         }
     }
 }
+
+@Serializable
+data class Queue(val items: List<Track>, val size: Int)

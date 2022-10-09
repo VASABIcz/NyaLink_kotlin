@@ -3,16 +3,15 @@ package trackloader
 import Player
 import commands.Play
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 
-// TODO: 23/01/2022 implemnt spotify 
 class TrackLoader(private val player: Player) {
     companion object {
-        val regex =
+        val urlRegex =
             Regex("https?://(www\\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)")
     }
 
@@ -20,7 +19,7 @@ class TrackLoader(private val player: Player) {
     private val cacheClient = player.node.client.cache
     var worker = player.scope.launch { work() }
 
-    var channel = Channel<Play>()
+    var channel = Channel<Play>(capacity = UNLIMITED)
     var isClosed = false
 
 
@@ -41,71 +40,101 @@ class TrackLoader(private val player: Player) {
         for (track in value.tracks) {
             val k = track.info.title
             val v = CacheData(listOf(track), value.timestamp)
-            logger.debug("caching $k $v track")
+            // logger.debug("caching $k $v track")
             cacheClient.set(k, Json.encodeToString(v))
-            delay(5)
+            cacheClient.set(track.info.uri, Json.encodeToString(v))
+            //delay(5)
         }
     }
 
+    /*
     suspend fun sendCallback(data: String) {
         // TODO uuid
         logger.debug("sending callback")
         player.node.client.send(data)
     }
 
-    suspend fun fetchSearch(t: Play): CacheData? {
-        val res = player.node.client.bestNodeFetch.also { logger.debug("sending work to node $it") }
-            ?.limitFetch("ytsearch:${t.name}")
+     */
 
-        if (res != null) {
-            return if (res.tracks.isEmpty()) {
-                logger.debug("no fetch search matches for ${t.name}")
-                null
-            } else {
-                logger.debug("successful search fetched ${t.name} ${res.tracks.size} tracks")
-                CacheData(listOf(res.tracks[0]), System.currentTimeMillis())
-            }
+    suspend fun fetchSearch(t: Play): CacheData? {
+        val node = player.node.client.bestNodeFetch
+
+        if (node == null) {
+            println("did not found suitable node to perform fetch ${t.name}")
+            return null
         }
-        return null
+
+        val searchType = when (t.searchType) {
+            "spotify" -> "spsearch"
+            "soundCloud" -> "scsearch"
+            "appleMusic" -> "amsearch"
+            "deezer" -> "dzsearch"
+            "youtube" -> "ytsearch"
+            else -> "ytsearch"
+        }
+
+        val searchString = "$searchType:${t.name}"
+
+        logger.debug("sending work to node $node")
+        val res = node.limitFetch(searchString)
+
+        if (res == null) {
+            logger.debug("fetch $searchString returned null")
+            return null
+        }
+
+        if (res.tracks.isEmpty()) {
+            logger.debug("no fetch search matches for $searchString")
+            return null
+        }
+
+        logger.debug("successful search fetched $searchString ${res.tracks.size} tracks")
+        return CacheData(listOf(res.tracks[0]), System.currentTimeMillis())
     }
 
-    suspend fun fetchUrl(t: Play): CacheData? {
-        val res = player.node.client.bestNodeFetch.also { logger.debug("sending work to node $it") }?.limitFetch(t.name)
+    suspend fun fetchUrl(url: String): CacheData? {
+        val res = player.node.client.bestNodeFetch.also { logger.debug("sending work to node $it") }?.limitFetch(url)
 
-        if (res != null) {
-            return if (res.tracks.isEmpty()) {
-                logger.debug("no fetch url matches for ${t.name}")
-                null
-            } else {
-                logger.debug("successful url fetched ${t.name} ${res.tracks.size} tracks")
-                CacheData(res.tracks, System.currentTimeMillis())
-            }
+        if (res == null || res.tracks.isEmpty()) {
+            logger.debug("no fetch url matches for $url")
+            return null
         }
-        return null
+
+        logger.debug("successful url fetched $url ${res.tracks.size} tracks")
+        return CacheData(res.tracks, System.currentTimeMillis())
     }
 
     suspend fun process(data: Play): CacheData? {
-        val cache = maybeCache(data.name)
-
-        return if (cache == null || !data.cache) {
-            logger.debug("fetched ${data.name}")
-
-            if (data.name.matches(regex)) {
-                fetchUrl(data).also { logger.debug("fetch_url res $it") }
-                    ?.also { player.scope.launch { cache(data.name, it) } }
-            } else {
-                fetchSearch(data).also { logger.debug("fetch_search res $it") }
-                    ?.also { player.scope.launch { cache(data.name, it) } }
-            }
+        val stripedName = data.name.strip()
+        val cache = if (data.cache) {
+            maybeCache(stripedName)
         } else {
-            logger.debug("used cache to retrieve ${data.name} ${cache.tracks.size} tracks")
-            cache
+            null
         }
+
+        println("cache is $cache ${data.cache}")
+        if (cache != null) {
+            logger.debug("used cache to retrieve $stripedName ${cache.tracks.size} tracks")
+            return cache
+        }
+
+        val res = if (stripedName.matches(urlRegex)) {
+            fetchUrl(stripedName)
+        } else {
+            fetchSearch(data)
+        }
+        if (res != null) {
+            player.scope.launch {
+                cache(stripedName, res)
+            }
+        }
+        return res
     }
 
     suspend fun work() {
         while (!isClosed) {
             try {
+                println("waiting for work")
                 val data = channel.receive().also { logger.debug("working on ${it.name}") }
 
                 val result = process(data)
@@ -114,24 +143,34 @@ class TrackLoader(private val player: Player) {
 
                 player.scope.launch { player.doNext() }
                 player.que.pushAll(result.tracks)
-
+                /*
                 player.scope.launch {
                     val callback =
                         TrackCallback("track_result", result.tracks[0], data.requester, data.channel, data.guild)
-                    sendCallback(Json.encodeToString(callback))
+                    // sendCallback(Json.encodeToString(callback))
                 }
 
-            } catch (_: Throwable) {
+                 */
+
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                isClosed = true
             }
         }
     }
 
     fun teardown() {
+        logger.debug("teardown track loader")
         isClosed = true
         channel.close()
     }
 
     fun clear() {
+        return
+        // FIXME
+        // causes kotlinx.coroutines.JobCancellationException: StandaloneCoroutine was cancelled; job=StandaloneCoroutine{Cancelling}@24332135
+        // which then causes player not responding
+        // TODO maybe single track loader for whole nyalink
         worker.cancel()
         channel = Channel()
         worker = player.scope.launch { work() }

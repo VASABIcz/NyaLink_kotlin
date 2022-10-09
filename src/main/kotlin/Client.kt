@@ -6,6 +6,7 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import trackloader.Cache
@@ -14,7 +15,7 @@ class Client(var id: Long, val cache: Cache) {
     private var websockets = mutableListOf<DefaultWebSocketSession>()
     var nodes = HashMap<String, Node>()
     private val logger = KotlinLogging.logger { }
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(Dispatchers.IO)
     val json = Json { ignoreUnknownKeys = true }
     val ktorClient = HttpClient(CIO) {
         install(WebSockets)
@@ -29,6 +30,8 @@ class Client(var id: Long, val cache: Cache) {
     val bestNodeFetch: Node?
         get() = availableNodes.maxByOrNull { node -> node.semaphore.availablePermits }
 
+    val playersIds: List<Long>
+        get() = availableNodes.flatMap { it.players.values.map { it.id } }
     /*
     val connected: Boolean
         get() = ws.isActive
@@ -57,7 +60,11 @@ class Client(var id: Long, val cache: Cache) {
             // player
             "destroy" -> parse<DestroyPlayer>(data)?.also { getPlayers()[it.guild]?.teardown() }
             "clear" -> parse<Clear>(data)?.also { getPlayers()[it.guild]?.clear() }
-            "skip" -> parse<Skip>(data)?.also { getPlayer(it.guild)?.stop() }
+            "skip" -> parse<Skip>(data)?.also {
+                getPlayer(it.guild)?.stop()
+                getPlayer(it.guild)?.doNext()
+            }
+
             "shuffle" -> parse<Shuffle>(data)?.also { getPlayers()[it.guild]?.que?.shuffle() }
             "play" -> parse<Play>(data)?.also { getPlayer(it.guild)?.fetchTrack(it) }
             "pause" -> parse<Pause>(data)?.also { getPlayers()[it.guild]?.sendPause(it) }
@@ -83,7 +90,12 @@ class Client(var id: Long, val cache: Cache) {
         try {
             for (x in ws.incoming) {
                 when (x) {
-                    is Frame.Text -> scope.launch { handle(x) }
+                    is Frame.Text -> scope.launch {
+                        println("///////////////////////// START")
+                        handle(x)
+                        println("///////////////////////// STOP")
+                    }
+
                     else -> {}
                 }
             }
@@ -99,9 +111,13 @@ class Client(var id: Long, val cache: Cache) {
         for (ws in websockets) {
             ws.send(text.toString())
         }
+        logger.debug("after sending to client")
     }
 
     suspend fun resume(ws: DefaultWebSocketSession) {
+        val x = Reconnect(playersIds, "reconnect")
+        println("sending reconnect")
+        ws.send(Frame.Text(Json.encodeToString(x)))
         listen(ws)
     }
 

@@ -1,5 +1,6 @@
 import commands.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import lavalink_commands.PlayerUpdate
@@ -18,8 +19,14 @@ import to_lavlaink_commands.Play as Playl
 import to_lavlaink_commands.Seek as Seekl
 
 // TODO: 22/01/2022 small todo FIX THIS FUCKING MESS + TRACK-LOADER MESS :D
+
+@Serializable
+data class PlayerStatus(val queueSize: Int, val playing: Boolean)
+
+@Serializable
+data class PlayerTeardown(val guild: Long, val op: String)
 class Player(var node: Node, val id: Long) {
-    val scope = CoroutineScope(Dispatchers.Default)
+    val scope = CoroutineScope(Dispatchers.IO)
     private val loader: TrackLoader = TrackLoader(this)
     private val logger = KotlinLogging.logger { }
     val que: SyncedQue<Track> = SyncedQue()
@@ -45,17 +52,22 @@ class Player(var node: Node, val id: Long) {
     var lastPosition = 0L
     var lastUpdate = 0L
 
-    fun teardown() {
+    suspend fun teardown() {
         logger.debug("tearing down player")
+        // this fixes bug that happens when bot disconnects and is still playing
+        // after reconnect it will send play even that will replace old playing song
+        // that will trigger onTrackStop and removing new song
+        // TODO maybe ignore onTrackStop replaced event
+        stop()
         node.players.remove(id)
         scope.cancel()
         loader.teardown()
+        node.client.send(Json.encodeToString(PlayerTeardown(id, "playerTeardown")))
     }
 
     suspend fun fetchTrack(data: Play) {
         loader.send(data)
         logger.debug("player state playing: $isPlaying waiting: $waiting current session: $current ${session?.channel_id}")
-        logger.debug("sending to worker queue ${data.name}")
     }
 
     suspend fun updateVoiceState(state: VoiceStateUpdate) {
@@ -106,7 +118,7 @@ class Player(var node: Node, val id: Long) {
         waiting.set(true)
         logger.debug("doing next")
         try {
-            withTimeout(1000 * 30 * 1) {
+            withTimeout(1000 * 30) {
                 val res = que.get()
                 logger.debug("got $res from queue")
                 sendPlay(res)

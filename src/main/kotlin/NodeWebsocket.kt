@@ -99,7 +99,25 @@ class NodeWebsocket(private val node: Node) {
                 node.players[it.guildId]?.onTrackStart()
             }
 
-            "TrackEndEvent" -> node.client.parse<TrackEndEvent>(data)?.also { node.players[it.guildId]?.onTrackStop() }
+            "TrackEndEvent" -> node.client.parse<TrackEndEvent>(data)?.also {
+                val player = node.players[it.guildId]
+                println("current track: $${player?.current?.info?.title} ${player?.current?.track} ${it.track}")
+                // FIXME crappy work around
+                // info the chars are different bcs position value is also stored
+                // so yeah either implement some loader that will extract data from this or just let it be
+                // tracks have few last characters different
+                val sliced = it.track.slice(0..it.track.length - 10)
+
+                if (player?.current?.track?.startsWith(sliced) == false) {
+                    logger.debug("track end event isn't current track")
+                    return
+                }
+                if (it.reason == "REPLACED") {
+                    logger.warn("ignored replace event $it")
+                    return
+                }
+                player?.onTrackStop()
+            }
         }
     }
  }

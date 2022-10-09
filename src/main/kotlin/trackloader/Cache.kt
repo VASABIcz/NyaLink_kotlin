@@ -21,6 +21,7 @@ class Cache(private val cache: JedisPooled) {
                 delay(d)
             }
         }
+        println("try times failed")
         return null
     }
 

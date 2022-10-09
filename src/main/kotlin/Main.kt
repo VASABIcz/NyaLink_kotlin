@@ -8,14 +8,27 @@ import io.ktor.server.websocket.*
 import kotlinx.serialization.json.Json
 import redis.clients.jedis.JedisPooled
 import trackloader.Cache
-import kotlin.system.exitProcess
 
 // TODO: 23/01/2022 for some reason multiple clients are buggy
+
+data class NyaLinkConfig(var port: Int? = null, var redisHost: String? = null, var redisPort: Int? = null)
+
+class ArgumentNotSpecified(name: String) : Throwable("argument $name was not specified or was invalid")
+
+fun getEnvConfig(): NyaLinkConfig {
+    val cfg = NyaLinkConfig()
+    val splited = System.getenv("REDIS").split(":")
+    cfg.redisHost = splited.getOrNull(0)
+    cfg.redisPort = splited.getOrNull(1)?.toIntOrNull()
+    cfg.port = System.getenv("PORT")?.toInt()
+    return cfg
+}
+
 fun main() {
-    val redisUrl = System.getenv("REDIS_URL") ?: System.err.println("REDIS_URL not provided").let { exitProcess(1) }
-    val redisPort =
-        System.getenv("REDIS_PORT")?.toInt() ?: System.err.println("REDIS_PORT not provided").let { exitProcess(1) }
-    val port = System.getenv("PORT")?.toInt() ?: System.err.println("PORT not provided").let { exitProcess(1) }
+    val cfg = getEnvConfig()
+    val redisPort = cfg.redisPort ?: throw ArgumentNotSpecified("redis port")
+    val redisUrl = cfg.redisHost ?: throw ArgumentNotSpecified("redis host")
+    val port = cfg.port ?: 8000
 
     val clients = HashMap<Long, Client>()
     val redis = JedisPooled(redisUrl, redisPort)
