@@ -11,7 +11,6 @@ import to_lavlaink_commands.Stop
 import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
 import trackloader.TrackCallback
-import trackloader.TrackLoader
 import utils.SyncedQue
 import java.util.concurrent.atomic.AtomicBoolean
 import to_lavlaink_commands.Pause as Pausel
@@ -26,8 +25,10 @@ data class PlayerStatus(val queueSize: Int, val playing: Boolean)
 @Serializable
 data class PlayerTeardown(val guild: Long, val op: String)
 class Player(var node: Node, val id: Long) {
-    val scope = CoroutineScope(Dispatchers.IO)
-    private val loader: TrackLoader = TrackLoader(this)
+    private val waiting: AtomicBoolean = AtomicBoolean(false)
+
+    @set:Synchronized
+    private var loaderScope = CoroutineScope(Dispatchers.IO)
     private val logger = KotlinLogging.logger { }
     val que: SyncedQue<Track> = SyncedQue()
 
@@ -35,9 +36,6 @@ class Player(var node: Node, val id: Long) {
     @set:Synchronized
     var session: VoiceStateUpdate? = null
     var event: VoiceServerUpdate? = null
-
-    val waiting: AtomicBoolean = AtomicBoolean(false)
-
     val isPlaying: Boolean
         get() {
             if (session?.channel_id != null && current != null) {
@@ -60,13 +58,19 @@ class Player(var node: Node, val id: Long) {
         // TODO maybe ignore onTrackStop replaced event
         stop()
         node.players.remove(id)
-        scope.cancel()
-        loader.teardown()
+        loaderScope.cancel()
+        // scope.newCoroutineContext()
+        // loader.teardown()
         node.client.send(Json.encodeToString(PlayerTeardown(id, "playerTeardown")))
     }
 
-    suspend fun fetchTrack(data: Play) {
-        loader.send(data)
+    // hopefully it will be destroyed w player
+    // it clould be posible to create separate context for fetching and close it on clear / teardown
+    suspend fun fetchTrack(data: Play) = loaderScope.launch {
+        val track = node.client.loader.fetch(data)
+            ?: return@launch logger.debug("player state playing: $isPlaying waiting: $waiting current session: $current ${session?.channel_id}")
+        que.pushAll(track.tracks)
+        doNext()
         logger.debug("player state playing: $isPlaying waiting: $waiting current session: $current ${session?.channel_id}")
     }
 
@@ -181,7 +185,9 @@ class Player(var node: Node, val id: Long) {
     }
 
     suspend fun clear() {
-        loader.clear()
+        loaderScope.cancel()
+        // FIXME might be source of bug
+        loaderScope = CoroutineScope(Dispatchers.IO)
         que.clear()
         stop()
     }

@@ -118,6 +118,10 @@ class NodeWebsocket(private val node: Node) {
                 }
                 player?.onTrackStop()
             }
+
+            else -> {
+                logger.warn("unhandled lavalink event $event")
+            }
         }
     }
  }

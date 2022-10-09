@@ -10,16 +10,18 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import trackloader.Cache
+import trackloader.TrackLoader
 
 class Client(var id: Long, val cache: Cache) {
     private var websockets = mutableListOf<DefaultWebSocketSession>()
     var nodes = HashMap<String, Node>()
     private val logger = KotlinLogging.logger { }
-    private val scope = CoroutineScope(Dispatchers.IO)
+    val scope = CoroutineScope(Dispatchers.IO)
     val json = Json { ignoreUnknownKeys = true }
     val ktorClient = HttpClient(CIO) {
         install(WebSockets)
     }
+    val loader = TrackLoader(this)
 
     val availableNodes: MutableCollection<Node>
         get() = nodes.values.filter { it.isAvailable }.toMutableList()
@@ -127,7 +129,7 @@ class Client(var id: Long, val cache: Cache) {
 
     suspend fun addNode(data: AddNode) {
         val node = Node(data, this)
-        val x = nodes.putIfAbsent(data.identifier, node)
+        nodes.putIfAbsent(data.identifier, node)
     }
 
     fun getPlayers(): HashMap<Long, Player> {
