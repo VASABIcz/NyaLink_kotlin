@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "me.microsft_is_gay"
-version = "1.0-SNAPSHOT"
+version = "1.0"
 
 repositories {
     mavenCentral()
@@ -22,7 +22,7 @@ tasks.withType<KotlinCompile> {
 }
 
 tasks {
-    val fatJar = register<Jar>("fatJar") {
+    register<Jar>("fatJar") {
         dependsOn.addAll(
             listOf(
                 "compileJava",
@@ -30,7 +30,7 @@ tasks {
                 "processResources"
             )
         ) // We need this for Gradle optimization to work
-        archiveClassifier.set("standalone") // Naming the jar
+        // archiveClassifier.set("standalone") // Naming the jar
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
         manifest { attributes(mapOf("Main-Class" to application.mainClass)) } // Provided we set it up in the application plugin configuration
         val sourcesMain = sourceSets.main.get()
@@ -38,9 +38,6 @@ tasks {
             .map { if (it.isDirectory) it else zipTree(it) } +
                 sourcesMain.output
         from(contents)
-    }
-    build {
-        dependsOn(fatJar) // Trigger fat jar creation during build
     }
 }
 
