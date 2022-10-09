@@ -56,8 +56,8 @@ class Player(var node: Node, val id: Long) {
         // after reconnect it will send play even that will replace old playing song
         // that will trigger onTrackStop and removing new song
         // TODO maybe ignore onTrackStop replaced event
-        stop()
         node.players.remove(id)
+        stop()
         loaderScope.cancel()
         // scope.newCoroutineContext()
         // loader.teardown()
