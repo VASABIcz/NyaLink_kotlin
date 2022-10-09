@@ -1,0 +1,42 @@
+name: Bundle CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    - name: Build jar with Gradle
+      run: ./gradlew fatJar
+      
+    - name: set username
+      run: git config --global user.name "VASABIcz"
+    - name: set email
+      run: git config --global user.email "vasabisroa@gmail.com"
+
+    - name: check for changes
+      run: git status
+    - name: stage changed files
+      run: git add --force build/libs
+    - name: commit changed files
+      run: git commit -m "Auto updating build"
+    - name: fetch from master
+      run: git fetch origin master
+    - name: push code to master
+      run: git push origin HEAD:master
