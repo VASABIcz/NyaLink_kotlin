@@ -7,5 +7,5 @@ data class State(
     val connected: Boolean,
     val position: Long = 0,
     val time: Long = 0,
-    val ping: Long
+    val ping: Long = -1
 )

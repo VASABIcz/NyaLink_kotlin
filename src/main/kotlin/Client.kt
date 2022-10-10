@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import trackloader.Cache
 import trackloader.TrackLoader
+import utils.sortByLoad
 
 class Client(var id: Long, val cache: Cache) {
     private var websockets = mutableListOf<DefaultWebSocketSession>()
@@ -23,21 +24,26 @@ class Client(var id: Long, val cache: Cache) {
     }
     val loader = TrackLoader(this)
 
-    val availableNodes: MutableCollection<Node>
-        get() = nodes.values.filter { it.isAvailable }.toMutableList()
+    val ableToPlay: List<Node>
+        get() = nodes.values.filter { it.canPlay }
 
-    val bestNodePlayers: Node?
-        get() = availableNodes.minByOrNull { node -> node.players.size }
+    val ableToFetch: List<Node>
+        get() = nodes.values.filter { it.canFetch }
+
+    fun ableToFetchThis(type: TrackSource): Node? {
+        return ableToFetch.filter {
+            it.args.supportedSources.contains(type)
+        }.sortByLoad().firstOrNull()
+    }
 
     val bestNodeFetch: Node?
-        get() = availableNodes.maxByOrNull { node -> node.semaphore.availablePermits }
+        get() = ableToFetch.sortByLoad().firstOrNull()
+
+    val bestPlayerNode: Node?
+        get() = ableToPlay.sortByLoad().firstOrNull()
 
     val playersIds: List<Long>
-        get() = availableNodes.flatMap { it.players.values.map { it.id } }
-    /*
-    val connected: Boolean
-        get() = ws.isActive
-     */
+        get() = ableToPlay.flatMap { it.players.values.map { it.id } }
 
     private suspend fun handle(frame: Frame.Text) {
         val data = frame.readText().trim()
@@ -118,7 +124,7 @@ class Client(var id: Long, val cache: Cache) {
 
     suspend fun resume(ws: DefaultWebSocketSession) {
         val x = Reconnect(playersIds, "reconnect")
-        println("sending reconnect")
+        logger.debug("sending reconnect")
         ws.send(Frame.Text(Json.encodeToString(x)))
         listen(ws)
     }
@@ -127,7 +133,7 @@ class Client(var id: Long, val cache: Cache) {
         return utils.parse<T>(data, json)
     }
 
-    suspend fun addNode(data: AddNode) {
+    fun addNode(data: AddNode) {
         val node = Node(data, this)
         nodes.putIfAbsent(data.identifier, node)
     }
@@ -135,7 +141,7 @@ class Client(var id: Long, val cache: Cache) {
     fun getPlayers(): HashMap<Long, Player> {
         val players = HashMap<Long, Player>()
 
-        availableNodes.forEach {
+        ableToPlay.forEach {
             it.players.values.forEach {
                 players[it.id] = it
             }
@@ -145,7 +151,7 @@ class Client(var id: Long, val cache: Cache) {
     }
 
     fun createPlayer(id: Long): Player? {
-        return bestNodePlayers?.createPlayer(id)
+        return bestPlayerNode?.createPlayer(id)
     }
 
     fun getPlayer(id: Long): Player? {

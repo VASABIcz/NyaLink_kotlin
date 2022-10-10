@@ -7,11 +7,13 @@ import lavalink_commands.PlayerUpdate
 import mu.KotlinLogging
 import responses.TrackEnd
 import responses.TrackStart
+import to_lavlaink_commands.Destroy
 import to_lavlaink_commands.Stop
 import to_lavlaink_commands.VoiceUpdate
 import trackloader.Track
 import trackloader.TrackCallback
 import utils.SyncedQue
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import to_lavlaink_commands.Pause as Pausel
 import to_lavlaink_commands.Play as Playl
@@ -24,7 +26,7 @@ data class PlayerStatus(val queueSize: Int, val playing: Boolean)
 
 @Serializable
 data class PlayerTeardown(val guild: Long, val op: String)
-class Player(var node: Node, val id: Long) {
+data class Player(var node: Node, val id: Long) {
     private val waiting: AtomicBoolean = AtomicBoolean(false)
 
     @set:Synchronized
@@ -34,21 +36,21 @@ class Player(var node: Node, val id: Long) {
 
     @get:Synchronized
     @set:Synchronized
-    var session: VoiceStateUpdate? = null
-    var event: VoiceServerUpdate? = null
+    private var session: VoiceStateUpdate? = null
+    private var event: VoiceServerUpdate? = null
     val isPlaying: Boolean
-        get() {
-            if (session?.channel_id != null && current != null) {
-                return true
-            }
-            return false
-        }
+        get() = session?.channel_id != null && current != null
 
     @get:Synchronized
     @set:Synchronized
     var current: Track? = null
-    var lastPosition = 0L
-    var lastUpdate = 0L
+        private set
+    private var lastPosition = 0L
+    private var lastUpdate = 0L
+
+    val currentPosition: Long
+        // FIXME looks like it works
+        get() = lastPosition + (Instant.now().toEpochMilli() - lastUpdate)
 
     suspend fun teardown() {
         logger.debug("tearing down player")
@@ -58,6 +60,10 @@ class Player(var node: Node, val id: Long) {
         // TODO maybe ignore onTrackStop replaced event
         node.players.remove(id)
         stop()
+        // FIXME this doesnt fix lavalink speeding up when moving
+        // but it least clears lavalink internal player and recreates it
+        // that fixes it
+        destroy()
         loaderScope.cancel()
         // scope.newCoroutineContext()
         // loader.teardown()
@@ -65,7 +71,7 @@ class Player(var node: Node, val id: Long) {
     }
 
     // hopefully it will be destroyed w player
-    // it clould be posible to create separate context for fetching and close it on clear / teardown
+    // it could be possible to create separate context for fetching and close it on clear / teardown
     suspend fun fetchTrack(data: Play) = loaderScope.launch {
         val track = node.client.loader.fetch(data)
             ?: return@launch logger.debug("player state playing: $isPlaying waiting: $waiting current session: $current ${session?.channel_id}")
@@ -138,6 +144,10 @@ class Player(var node: Node, val id: Long) {
         node.send(Json.encodeToString(Stop(guildId = id.toString(), op = "stop")))
     }
 
+    suspend fun destroy() {
+        node.send(Json.encodeToString(Destroy(guildId = id.toString(), op = "destroy")))
+    }
+
     suspend fun onTrackStop() {
         logger.info("removing track: $current")
         current?.also {
@@ -162,13 +172,23 @@ class Player(var node: Node, val id: Long) {
         node.client.send(Json.encodeToString(TrackEnd(t, id, "trackEnd")))
     }
 
-    suspend fun sendPlay(track: Track) {
+    suspend fun sendPlay(track: Track, startTime: Long = 0) {
+        logger.debug("play start time $startTime ms")
+        // FIXME looks like it works
         logger.debug("play invoked $id ${track.info.title}")
         current = track
         lastPosition = 0
         lastUpdate = 0
 
-        val payload = Json.encodeToString(Playl(id.toString(), track.track, op = "play", noReplace = false))
+        val payload = Json.encodeToString(
+            Playl(
+                id.toString(),
+                track.track,
+                op = "play",
+                noReplace = false,
+                startTime = startTime
+            )
+        )
         node.send(payload)
     }
 
@@ -192,14 +212,24 @@ class Player(var node: Node, val id: Long) {
         stop()
     }
 
-    fun move(identifier: String? = null) {
-        // TODO: 23/01/2022 not sure if it works 
+    suspend fun move(identifier: String? = null) {
+        // FIXME it works partially clean up
         node.players.remove(id)
-        if (identifier != null) {
-            node.client.nodes[identifier]?.also { node = it }?.also { it.players[id] = this@Player }
+        val node = if (identifier != null) {
+            node.client.nodes[identifier]
         } else {
-            node.client.bestNodePlayers?.also { node = it }?.also { it.players[id] = this@Player }
+            node.client.bestPlayerNode ?: return
         }
+
+        if (node == null) {
+            logger.error("failed to move player $id $identifier node is null nodes: ${this.node.client.nodes}")
+            return
+        }
+
+        this.node = node
+        node.players[id] = this
+        sendVoice()
+        sendPlay(current!!, currentPosition)
     }
 
     suspend fun sendCallback(data: NowPlaying) {

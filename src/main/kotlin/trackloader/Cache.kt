@@ -13,7 +13,7 @@ class Cache(private val cache: JedisPooled) {
         }
     }
 
-    private suspend fun <T> tryTimes(times: Int = 5, d: Long = 100, x: () -> T?): T? {
+    private suspend fun <T> tryTimes(times: Int = 2, d: Long = 100, x: () -> T?): T? {
         repeat(times) {
             try {
                 return x()

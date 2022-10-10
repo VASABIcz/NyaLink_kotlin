@@ -3,9 +3,11 @@ package utils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import mu.KotlinLogging
 
 // FIXME: 23/01/2022 not working
 // FIXME: 23/01/2022 play skips whole queue for some reason
+/*
 class Que<T> {
     private var queue = emptyList<T>().toMutableList()
     private var job = Job()
@@ -107,11 +109,13 @@ class Que<T> {
     }
 }
 
+ */
+
 class SyncedQue<T> {
     private var queue = emptyList<T>().toMutableList()
     private var lock = Mutex()
     private var job = Job()
-
+    private val logger = KotlinLogging.logger { }
     private var loop = LoopType.None
 
     val items: List<T>
@@ -124,7 +128,7 @@ class SyncedQue<T> {
     suspend fun get(): T {
         if (queue.size == 0) {
             awaitJob()
-            println(queue)
+            logger.debug(queue.toString())
         }
 
         return queue[0]
@@ -172,7 +176,7 @@ class SyncedQue<T> {
 
     suspend fun consume() {
         lock.withLock {
-            println("consuming $loop $queue")
+            logger.debug("consuming $loop $queue")
             if (queue.size > 0) {
                 when (loop) {
                     LoopType.None -> rawConsume()
@@ -189,9 +193,9 @@ class SyncedQue<T> {
 
     suspend fun push(item: T) {
         lock.withLock {
-            println("que ${this.queue} $job $")
+            logger.debug("que ${this.queue} $job $")
             rawPush(item)
-            println("pushed $item")
+            logger.debug("pushed $item")
             job.complete()
         }
     }

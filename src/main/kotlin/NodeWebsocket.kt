@@ -13,9 +13,9 @@ class NodeWebsocket(private val node: Node) {
     private val logger = KotlinLogging.logger { }
     val isConnected: Boolean
         get() = ws?.isActive ?: false
-    var isClosed = false
+    private var isClosed = false
 
-    var ws: DefaultWebSocketSession? = null
+    private var ws: DefaultWebSocketSession? = null
 
     private suspend fun handle(frame: Frame.Text) {
         val data = frame.readText()
@@ -55,19 +55,40 @@ class NodeWebsocket(private val node: Node) {
                     install(WebSockets)
                 }
                 try {
-                    client.webSocket(method = HttpMethod.Get, host = node.args.host, port = node.args.port, request = {
-                        header("Authorization", node.args.password)
-                        header("User-Id", node.client.id.toString())
-                        header("Client-Name", "NyaLink_kotlin")
-                    }) {
-                        ws = this@webSocket
-                        withContext(Dispatchers.Default) { listener() }
-                        logger.debug("closing lavalink ws ${node.args.identifier}")
-                        return@webSocket
+                    if (node.args.secure) {
+                        client.wss(method = HttpMethod.Get, host = node.args.host, port = node.args.port, request = {
+                            header("Authorization", node.args.password)
+                            header("User-Id", node.client.id.toString())
+                            header("Client-Name", "NyaLink_kotlin")
+                        }) {
+                            ws = this@wss
+                            withContext(Dispatchers.Default) { listener() }
+                            logger.debug("closing lavalink ws ${node.args.identifier}")
+                            return@wss
+                        }
+                    } else {
+                        client.webSocket(
+                            method = HttpMethod.Get,
+                            host = node.args.host,
+                            port = node.args.port,
+                            request = {
+                                header("Authorization", node.args.password)
+                                header("User-Id", node.client.id.toString())
+                                header("Client-Name", "NyaLink_kotlin")
+                            }) {
+                            ws = this@webSocket
+                            withContext(Dispatchers.Default) { listener() }
+                            logger.debug("closing lavalink ws ${node.args.identifier}")
+                            return@webSocket
+                        }
                     }
                 }
                 catch (e: Throwable) {
                     logger.debug("ws exception ${node.args.identifier} $e")
+                    for (p in node.players.values) {
+                        logger.debug("moving player ${p.id}")
+                        p.move()
+                    }
                     delay(1000)
                 }
             }
@@ -101,7 +122,7 @@ class NodeWebsocket(private val node: Node) {
 
             "TrackEndEvent" -> node.client.parse<TrackEndEvent>(data)?.also {
                 val player = node.players[it.guildId]
-                println("current track: $${player?.current?.info?.title} ${player?.current?.track} ${it.track}")
+                logger.debug("current track: $${player?.current?.info?.title} ${player?.current?.track} ${it.track}")
                 // FIXME crappy work around
                 // info the chars are different bcs position value is also stored
                 // so yeah either implement some loader that will extract data from this or just let it be

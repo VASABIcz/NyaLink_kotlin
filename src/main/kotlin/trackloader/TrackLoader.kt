@@ -2,6 +2,7 @@ package trackloader
 
 import Client
 import commands.Play
+import commands.TrackSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -47,20 +48,19 @@ class TrackLoader(private val client: Client) {
     }
 
     private suspend fun fetchSearch(t: Play): CacheData? {
-        val node = client.bestNodeFetch
-
-        if (node == null) {
-            println("did not found suitable node to perform fetch ${t.name}")
-            return null
+        val searchType = when (t.getType) {
+            TrackSource.spotify -> "spsearch"
+            TrackSource.soundCloud -> "scsearch"
+            TrackSource.appleMusic -> "amsearch"
+            TrackSource.deezer -> "dzsearch"
+            TrackSource.youtube -> "ytsearch"
         }
 
-        val searchType = when (t.searchType) {
-            "spotify" -> "spsearch"
-            "soundCloud" -> "scsearch"
-            "appleMusic" -> "amsearch"
-            "deezer" -> "dzsearch"
-            "youtube" -> "ytsearch"
-            else -> "ytsearch"
+        val node = client.ableToFetchThis(t.getType)
+
+        if (node == null) {
+            logger.error("did not found suitable node to perform fetch ${t.name} ${client.nodes}")
+            return null
         }
 
         val searchString = "$searchType:${t.name}"
@@ -83,10 +83,24 @@ class TrackLoader(private val client: Client) {
     }
 
     private suspend fun fetchUrl(url: String): CacheData? {
-        val res = client.bestNodeFetch.also { logger.debug("sending work to node $it") }?.limitFetch(url)
+        // TODO check url to determine source and pick node accordingly
+        val node = client.bestNodeFetch
 
-        if (res == null || res.tracks.isEmpty()) {
-            logger.debug("no fetch url matches for $url")
+        if (node == null) {
+            logger.error("did not found suitable node to perform fetch $url nodes: ${client.nodes}")
+            return null
+        }
+
+        logger.debug("sending work to node $node")
+        val res = node.limitFetch(url)
+
+        if (res == null) {
+            logger.debug("fetch $url returned null")
+            return null
+        }
+
+        if (res.tracks.isEmpty()) {
+            logger.debug("no fetch search matches for $url")
             return null
         }
 
@@ -102,7 +116,7 @@ class TrackLoader(private val client: Client) {
             null
         }
 
-        println("cache is $cache ${data.cache}")
+        logger.debug("cache is $cache ${data.cache}")
         if (cache != null) {
             logger.debug("used cache to retrieve $stripedName ${cache.tracks.size} tracks")
             return cache

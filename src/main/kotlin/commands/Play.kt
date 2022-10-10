@@ -9,5 +9,9 @@ data class Play(
     val cache: Boolean = true,
     val requester: Long,
     val channel: Long,
-    val searchType: String?
-)
+    val searchType: TrackSource? = TrackSource.youtube
+) {
+
+    val getType: TrackSource
+        get() = searchType ?: TrackSource.youtube
+}
