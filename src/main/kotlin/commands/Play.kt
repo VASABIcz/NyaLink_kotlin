@@ -8,7 +8,6 @@ data class Play(
     val name: String,
     val cache: Boolean = true,
     val requester: Long,
-    val channel: Long,
     val searchType: TrackSource? = TrackSource.youtube
 ) {
 

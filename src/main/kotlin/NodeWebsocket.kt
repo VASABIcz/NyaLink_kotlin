@@ -24,8 +24,11 @@ class NodeWebsocket(private val node: Node) {
         val d = node.client.parse<Event>(data)
         d?.op?.also { if (it != "playerUpdate") logger.debug("received lavalink $it") }
         when (d?.op) {
-            "stats" -> node.client.parse<Stats>(data)?.also { logger.debug(it.toString()) }
-                .also { node.statistics = it }
+            "stats" -> {
+                val stats = node.client.parse<Stats>(data)
+                logger.debug(stats.toString())
+                node.statistics = stats
+            }
 
             "event" -> processEvent(d, data)
             "playerUpdate" -> node.client.parse<PlayerUpdate>(data)
