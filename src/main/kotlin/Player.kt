@@ -128,7 +128,7 @@ data class Player(var node: Node, val id: Long) {
         waiting.set(true)
         logger.debug("doing next")
         try {
-            withTimeout(1000 * 30) {
+            withTimeout(1000 * 60 * 5) {
                 val res = que.get()
                 logger.debug("got $res from queue")
                 sendPlay(res)
