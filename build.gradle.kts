@@ -1,14 +1,14 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-val ktor_version = "2.1.2"
+val ktor_version = "2.3.0"
 
 plugins {
-    kotlin("jvm") version "1.6.10"
+    kotlin("jvm") version "1.8.0"
     application
     kotlin("plugin.serialization") version "1.6.10"
 }
 
-group = "me.microsft_is_gay"
+group = "cz.vasabi"
 version = "1.0"
 
 repositories {

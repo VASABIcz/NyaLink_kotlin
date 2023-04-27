@@ -1,3 +1,4 @@
+import App.client
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.websocket.*
@@ -42,6 +43,7 @@ class NodeWebsocket(private val node: Node) {
         for (x in ws?.incoming!!) {
             when (x) {
                 is Frame.Text -> handle(x)
+                else -> {}
             }
         }
     }
@@ -54,9 +56,6 @@ class NodeWebsocket(private val node: Node) {
             }
             logger.debug("connecting to ${node.args.identifier} ${node.args}")
             while (!isConnected and !isClosed) {
-                val client = HttpClient(CIO) {
-                    install(WebSockets)
-                }
                 try {
                     if (node.args.secure) {
                         client.wss(method = HttpMethod.Get, host = node.args.host, port = node.args.port, request = {
