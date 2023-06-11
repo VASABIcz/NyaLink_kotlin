@@ -20,7 +20,7 @@ class Que<T> {
     val size: Int
         get() = queue.size
 
-    // FIXME: 23/01/2022 erroring here  
+    // FIXME: 23/01/2022 erroring here
     suspend fun get(): T {
         if (queue.size == 0) {
             await_job()
